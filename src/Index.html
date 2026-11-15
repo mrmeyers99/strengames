@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StrenGames</title>
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <svg class="emblem" viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="30" fill="#0b4632" stroke="#c89247" stroke-width="3"/>
+        <circle cx="32" cy="32" r="24" fill="none" stroke="#c89247" stroke-width="1" stroke-dasharray="2 3"/>
+        <path d="M32 11 l3.2 6.6 7.2 1 -5.2 5 1.2 7.2 -6.4 -3.4 -6.4 3.4 1.2 -7.2 -5.2 -5 7.2 -1z" fill="#c89247"/>
+        <text x="32" y="48" text-anchor="middle" font-family="Volkhov, Georgia, serif" font-weight="700" font-size="15" fill="#f3e4c8">SG</text>
+      </svg>
+      <div class="titles">
+        <div class="kicker">The Strenuous Life &middot; Six-Week Competition</div>
+        <h1 class="season-name" id="seasonName">StrenGames</h1>
+        <div class="tagline" id="tagline">Do hard things.</div>
+        <div class="season-dates" id="seasonDates"></div>
+      </div>
+      <img class="mast-moose" id="mastMoose" alt="Theodore Roosevelt riding a moose" hidden>
+      <div class="whoami"><button id="whoBtn" type="button">Who are you?</button></div>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" data-view="report" aria-selected="true">Weekly Report</button>
+      <button role="tab" data-view="standings" aria-selected="false">Standings</button>
+      <button role="tab" data-view="record" aria-selected="false">My Record</button>
+      <button role="tab" data-view="enlist" aria-selected="false">Enlist &amp; Teams</button>
+      <button role="tab" data-view="rules" aria-selected="false">Rules</button>
+    </nav>
+  </header>
+
+  <main>
+    <div id="loading" class="loading">Mustering the troops&hellip;</div>
+    <section class="view" id="view-report" hidden></section>
+    <section class="view" id="view-standings" hidden></section>
+    <section class="view" id="view-record" hidden></section>
+    <section class="view" id="view-enlist" hidden></section>
+    <section class="view" id="view-rules" hidden></section>
+  </main>
+
+  <div class="modal-back" id="whoModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="whoTitle">
+      <h2 id="whoTitle">Report for duty</h2>
+      <p class="lede small">Find your name. New to this season? <a href="#" id="whoEnlist">Enlist first</a>.</p>
+      <input type="search" id="whoSearch" placeholder="Search by name or TSL username" autocomplete="off">
+      <ul class="people" id="whoList"></ul>
+      <div class="row" style="margin-top:12px"><button class="btn ghost" type="button" id="whoClose">Cancel</button></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>window.HERO_SRC = <?!= JSON.stringify(heroSrc_()) ?>;</script>
+  <?!= include('Client'); ?>
+</body>
+</html>

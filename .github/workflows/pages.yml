@@ -1,0 +1,40 @@
+# Publishes docs/ (the framed live app) plus a generated demo with made-up data to GitHub Pages.
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'src/**', 'test/build-preview.js', 'test/gas-mock.js', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build demo page
+        run: node test/build-preview.js "2025-11-10 19:30:00" docs/demo.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

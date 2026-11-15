@@ -1,0 +1,752 @@
+<script>
+(function () {
+  'use strict';
+  var APP_VERSION = '2026-11-15.5';
+
+  // ------------------------------------------------------------ quotes
+  var QUOTES = [
+    ['I wish to preach, not the doctrine of ignoble ease, but the doctrine of the strenuous life.', 'Theodore Roosevelt'],
+    ['It is not the critic who counts… The credit belongs to the man who is actually in the arena, whose face is marred by dust and sweat and blood.', 'Theodore Roosevelt'],
+    ['Far and away the best prize that life offers is the chance to work hard at work worth doing.', 'Theodore Roosevelt'],
+    ['Do what you can, with what you have, where you are.', 'Theodore Roosevelt'],
+    ['Happiness and usefulness are largely found in the same soul.', 'Theodore Roosevelt'],
+    ['In the long run, in the great battle of life, no brilliancy of intellect, no perfection of bodily development, will count when weighed in the balance against that assemblage of virtues… which we group together under the name of character.', 'Theodore Roosevelt'],
+    ['Believe you can and you’re halfway there.', 'Theodore Roosevelt'],
+    ['Nothing in the world is worth having or worth doing unless it means effort, pain, difficulty.', 'Theodore Roosevelt'],
+    ['I am strong to be useful. I choose action over abstraction. I do hard things.', 'The Strenuous Life Creed'],
+    ['I train for harmony in body, mind, and soul.', 'The Strenuous Life Creed'],
+    ['Mens sana in corpore sano — a strong mind in a strong body.', 'Motto of the ancient gymnasia'],
+    ['Strip or retire.', 'Inscription over an ancient Greek gymnasium'],
+    ['Keep your honor strenuously.', 'The Strenuous Life Handbook']
+  ];
+  function quoteHtml(i) {
+    var q = QUOTES[i === undefined ? Math.floor(Math.random() * QUOTES.length) : i % QUOTES.length];
+    return '<blockquote class="quote"><p>“' + esc(q[0]) + '”</p><cite>— ' + esc(q[1]) + '</cite></blockquote>';
+  }
+
+  // ------------------------------------------------------------ TR speech bubble
+  var QUIPS = [
+    'Bully!', 'Dee-lighted!', 'Bully for you!', 'Vim, vigor, and energy!', 'Into the arena!', 'Spectators need not apply.',
+    'Selfless self-improvement!', 'Do what you can, with what you have, where you are.', 'Get action!', 'Bully!', 'Dee-lighted!',
+    'Get action!', 'Bully for you! That’s the strenuous life.', 'Dee-lighted! Now on to the next.', 'No mollycoddles here!',
+    'Out of the parlor and into the arena!', 'Ignoble ease loses again!', 'Splendid! Vigor of body, vigor of mind.',
+    'By George, that’s the stuff!', 'You pulled your weight today. Bully!', 'Hardihood rewarded!',
+    'A good deed done. The Republic is better for it.', 'Work worth doing, done well. Dee-lighted!'
+  ];
+  var lastQuip = '';
+  function trSays() {
+    var q;
+    do { q = QUIPS[Math.floor(Math.random() * QUIPS.length)]; } while (q === lastQuip && QUIPS.length > 1);
+    lastQuip = q;
+    var mast = $('#mastMoose'), bubble = $('#trBubble'), float = $('#trFloat');
+    var r = mast && !mast.hidden ? mast.getBoundingClientRect() : null;
+    var inView = r && r.bottom > 40 && r.top < window.innerHeight;
+    clearTimeout(trSays._t);
+    bubble.textContent = q;
+    if (inView) {
+      // speak from the header moose: bubble sits to the left of TR's head
+      float.classList.remove('show');
+      bubble.className = 'tr-bubble at-mast';
+      var w = Math.min(240, window.innerWidth - 32);
+      bubble.style.maxWidth = w + 'px';
+      bubble.style.left = ''; bubble.style.right = Math.max(8, window.innerWidth - r.left - 6) + 'px';
+      bubble.style.top = Math.max(8, r.top + 4) + 'px';
+      bubble.style.bottom = '';
+      requestAnimationFrame(function () { bubble.classList.add('show'); });
+    } else {
+      // header is scrolled away: a small moose trots in at the bottom corner
+      float.appendChild(bubble);
+      bubble.className = 'tr-bubble in-float';
+      bubble.style.left = bubble.style.right = bubble.style.top = bubble.style.bottom = bubble.style.maxWidth = '';
+      float.classList.add('show');
+      requestAnimationFrame(function () { bubble.classList.add('show'); });
+    }
+    trSays._t = setTimeout(function () {
+      bubble.classList.remove('show'); float.classList.remove('show');
+      setTimeout(function () { if (!bubble.classList.contains('show')) document.body.appendChild(bubble); }, 400);
+    }, 3200);
+  }
+  function setupTR() {
+    var bubble = document.createElement('div');
+    bubble.id = 'trBubble'; bubble.className = 'tr-bubble'; bubble.setAttribute('role', 'status'); bubble.setAttribute('aria-live', 'polite');
+    document.body.appendChild(bubble);
+    var float = document.createElement('div');
+    float.id = 'trFloat'; float.className = 'tr-float'; float.setAttribute('aria-hidden', 'true');
+    if (window.HERO_SRC) { var img = document.createElement('img'); img.src = window.HERO_SRC; img.alt = ''; float.appendChild(img); }
+    document.body.appendChild(float);
+    window.addEventListener('scroll', function () { if ($('#trBubble').classList.contains('at-mast')) $('#trBubble').classList.remove('show'); }, { passive: true });
+  }
+
+  // ------------------------------------------------------------ server bridge
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      if (window.google && google.script && google.script.run) {
+        var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (e) { reject(e); });
+        r[fn].apply(r, args);
+      } else if (window.MockServer) {
+        try { resolve(JSON.parse(JSON.stringify(window.MockServer[fn].apply(null, args)))); } catch (e) { reject(e); }
+      } else reject(new Error('No server available'));
+    });
+  }
+
+  // ------------------------------------------------------------ state
+  var S = { boot: null, skew: 0, me: null, record: null, standings: null, view: 'report', week: null, draft: null,
+    standTab: 'individuals', standQuery: '', signupTeams: [], joinTeams: [], expanded: {} };
+  var LS_KEY = 'strengames.me';
+  function store(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function now() { return Date.now() + S.skew; }
+
+  // ------------------------------------------------------------ utils
+  function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+  function fmtN(n) { return Number(n || 0).toLocaleString('en-US'); }
+  function until(ms) {
+    if (ms <= 0) return 'now';
+    var m = Math.floor(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+    if (d > 0) return d + 'd ' + h + 'h';
+    if (h > 0) return h + 'h ' + mm + 'm';
+    return Math.max(1, mm) + 'm';
+  }
+  function toast(msg, isErr) {
+    var t = $('#toast');
+    t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.className = 'toast'; }, isErr ? 6000 : 3500);
+  }
+  function errMsg(e) { return (e && (e.message || e.toString()) || 'Something went wrong').replace(/^Error:\s*/, '').replace(/^Exception:\s*/, ''); }
+  function participant(id) { return (S.boot.participants || []).filter(function (p) { return p.id === id; })[0] || null; }
+  function busy(btn, on, label) {
+    if (!btn) return;
+    if (on) { btn.dataset.label = btn.innerHTML; btn.disabled = true; btn.innerHTML = label || 'Working…'; }
+    else { btn.disabled = false; if (btn.dataset.label) btn.innerHTML = btn.dataset.label; }
+  }
+
+  // ------------------------------------------------------------ boot
+  function init() {
+    var foot = document.createElement('div'); foot.className = 'app-version'; foot.textContent = 'StrenGames Hub v' + APP_VERSION; document.body.appendChild(foot);
+    var missing = ['#whoBtn', '#whoModal', '#whoSearch', '#whoList', '#toast', '#loading'].filter(function (id) { return !$(id); });
+    if (missing.length) {
+      document.body.innerHTML = '<div style="font-family:sans-serif;max-width:560px;margin:60px auto;padding:20px;border:2px solid #a8322b;border-radius:10px">' +
+        '<h2 style="margin-top:0">Setup problem</h2><p>The page markup is missing (' + missing.join(', ') + '). In the Apps Script project, ' +
+        'check that the <b>Index</b> file contains <code>Index.html</code> (it starts with <code>&lt;!DOCTYPE html&gt;</code>) and that <b>Client</b> contains <code>Client.html</code>. ' +
+        'Then deploy a new version.</p></div>';
+      return;
+    }
+    setupTR();
+    $all('nav.tabs button').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.view); }); });
+    $('#whoBtn').addEventListener('click', openWho);
+    $('#whoClose').addEventListener('click', closeWho);
+    $('#whoEnlist').addEventListener('click', function (e) { e.preventDefault(); closeWho(); S.me = null; S.record = null; store(LS_KEY, null); renderWho(); go('enlist'); });
+    $('#whoSearch').addEventListener('input', renderWhoList);
+    $('#whoModal').addEventListener('click', function (e) { if (e.target.id === 'whoModal') closeWho(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#whoModal').hidden) closeWho(); });
+    var hash = (location.hash || '').replace('#', '');
+    call('getBootstrap').then(function (b) {
+      applyBoot(b);
+      var saved = load(LS_KEY);
+      if (saved && participant(saved)) S.me = saved;
+      renderWho();
+      $('#loading').hidden = true;
+      go(['report', 'standings', 'record', 'enlist', 'rules'].indexOf(hash) > -1 ? hash : (S.me ? 'report' : (S.boot.registration.state === 'open' ? 'enlist' : 'standings')));
+      setInterval(tick, 30000);
+    }).catch(function (e) { $('#loading').textContent = 'Could not load: ' + errMsg(e); });
+  }
+  function applyBoot(b) {
+    S.boot = b; S.skew = b.now - Date.now();
+    $('#seasonName').textContent = b.season.name || 'StrenGames';
+    document.title = b.season.name || 'StrenGames';
+    $('#tagline').textContent = b.season.tagline || '';
+    var mm = $('#mastMoose'); if (window.HERO_SRC) { mm.src = window.HERO_SRC; mm.hidden = false; if (b.season.hero && b.season.hero.alt) mm.alt = b.season.hero.alt; }
+    $('#seasonDates').textContent = b.season.startLabel ? b.season.startLabel + ' – ' + b.season.endLabel + ' · ' + b.season.weeks.length + ' weeks' : '';
+    renderWho();
+  }
+  function tick() { $all('[data-until]').forEach(function (el) { el.textContent = until(Number(el.dataset.until) - now()); }); }
+
+  function go(view) {
+    S.view = view;
+    $all('nav.tabs button').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.view === view ? 'true' : 'false'); });
+    $all('.view').forEach(function (v) { v.hidden = v.id !== 'view-' + view; });
+    try { history.replaceState(null, '', '#' + view); } catch (e) {}
+    ({ report: renderReport, standings: renderStandings, record: renderRecord, enlist: renderEnlist, rules: renderRules })[view]();
+    window.scrollTo(0, 0);
+  }
+
+  // ------------------------------------------------------------ identity
+  function renderWho() {
+    var p = S.me && participant(S.me);
+    $('#whoBtn').textContent = p ? p.name + ' ▾' : 'Who are you?';
+  }
+  function openWho() { $('#whoModal').hidden = false; $('#whoSearch').value = ''; renderWhoList(); setTimeout(function () { $('#whoSearch').focus(); }, 30); }
+  function closeWho() { $('#whoModal').hidden = true; }
+  function renderWhoList() {
+    var q = $('#whoSearch').value.trim().toLowerCase();
+    var list = S.boot.participants.filter(function (p) {
+      return !q || p.name.toLowerCase().indexOf(q) > -1 || String(p.username).toLowerCase().indexOf(q.replace(/^@/, '')) > -1;
+    }).slice(0, 80);
+    $('#whoList').innerHTML = list.length ? list.map(function (p) {
+      return '<li><button type="button" data-id="' + esc(p.id) + '">' + esc(p.name) + '<span class="u">@' + esc(p.username) + '</span></button></li>';
+    }).join('') : '<li class="empty">No one by that name yet. <a href="#" data-enlist>Enlist?</a></li>';
+    $all('#whoList button').forEach(function (b) { b.addEventListener('click', function () { setMe(b.dataset.id); closeWho(); }); });
+    var en = $('#whoList [data-enlist]');
+    if (en) en.addEventListener('click', function (e) { e.preventDefault(); closeWho(); go('enlist'); });
+  }
+  function setMe(id) {
+    S.me = id; S.record = null; S.week = null; S.draft = null; store(LS_KEY, id); renderWho();
+    go(S.view === 'record' ? 'record' : 'report');
+  }
+  function needMe(el, what) {
+    el.innerHTML = quoteHtml() + '<div class="card"><h2>Report for duty</h2><p class="lede">Pick your name to ' + what + '.</p>' +
+      '<div class="row"><button class="btn" type="button" data-who>Find my name</button>' +
+      (S.boot.registration.state === 'open' ? '<button class="btn ghost" type="button" data-go="enlist">Enlist for this season</button>' : '') + '</div></div>';
+    $('[data-who]', el).addEventListener('click', openWho);
+    var g = $('[data-go]', el); if (g) g.addEventListener('click', function () { go('enlist'); });
+  }
+  function ensureRecord() {
+    if (S.record && S.record.participant.id === S.me) return Promise.resolve(S.record);
+    return call('getMyRecord', S.me).then(function (r) { S.record = r; return r; }).catch(function (e) {
+      if (/couldn.t find/i.test(errMsg(e))) { S.me = null; store(LS_KEY, null); renderWho(); }
+      throw e;
+    });
+  }
+
+  // ------------------------------------------------------------ weekly report
+  function renderReport() {
+    var el = $('#view-report');
+    if (!S.me) return needMe(el, 'file your weekly report');
+    el.innerHTML = '<div class="loading">Fetching your record…</div>';
+    ensureRecord().then(function (r) { drawReport(el, r); }).catch(function (e) { el.innerHTML = '<div class="card">' + esc(errMsg(e)) + '</div>'; });
+  }
+
+  function defaultWeek(r) {
+    var wk = r.weeks.filter(function (w) { return (w.state === 'open' || w.state === 'late') && !w.submitted; })[0] ||
+      r.weeks.filter(function (w) { return w.state === 'open' || w.state === 'late'; }).slice(-1)[0] ||
+      r.weeks.filter(function (w) { return w.state === 'closed'; }).slice(-1)[0] || r.weeks[0];
+    return wk ? wk.week : null;
+  }
+
+  function onceEarned(r, field, wk) {
+    // which other week already claimed this season-once item?
+    var hit = r.weeks.filter(function (w) { return w.week !== wk && w.checkin && w.checkin[field]; })[0];
+    return hit ? hit.week : null;
+  }
+
+  function drawReport(el, r) {
+    var season = S.boot.season;
+    if (!r.weeks.length) { el.innerHTML = '<div class="card empty">The weeks for this season haven’t been set up yet.</div>'; return; }
+    if (S.week === null || !r.weeks.some(function (w) { return w.week === S.week; })) S.week = defaultWeek(r);
+    var w = r.weeks.filter(function (x) { return x.week === S.week; })[0];
+    var sw = season.weeks.filter(function (x) { return x.week === S.week; })[0] || {};
+    if (!S.draft || S.draft.week !== S.week) {
+      var c = w.checkin || {};
+      S.draft = { week: S.week, pa_days: c.pa_days || 0, deed_days: c.deed_days || 0, agon: !!c.agon, badge_done: !!c.badge_done,
+        badge_requirement: c.badge_requirement || '', badge_requirement_id: c.badge_requirement_id || '', agft: c.agft === undefined ? '' : c.agft,
+        meetup: !!c.meetup, personal_goal: !!c.personal_goal, bonus: !!c.bonus };
+    }
+    var d = S.draft, P = season.points;
+    var editable = w.state === 'open' || w.state === 'late';
+
+    var chips = r.weeks.map(function (x) {
+      var sx = season.weeks.filter(function (y) { return y.week === x.week; })[0] || {};
+      var st = x.state === 'open' ? (x.submitted ? 'Filed · editable' : 'Open') : x.state === 'late' ? 'Late window' : x.state === 'upcoming' ? 'Opens ' + shortDate(x.opensLabel) : (x.submitted ? 'Filed' : 'Closed');
+      return '<button type="button" class="week-chip state-' + x.state + (x.submitted ? ' done' : '') + '" aria-pressed="' + (x.week === S.week) + '" data-week="' + x.week + '">' +
+        '<div class="wk">Week ' + x.week + '</div><div class="st">' + esc(sx.range || '') + '</div><div class="st">' + esc(st) + '</div></button>';
+    }).join('');
+
+    var banner = '';
+    if (w.state === 'open') banner = '<div class="banner open"><div>Due <b>' + esc(w.deadlineLabel) + '</b> — closes in <b data-until="' + w.deadline + '">' + until(w.deadline - now()) + '</b>.' + (w.extended ? ' (Your personal extension applies.)' : '') + (w.submitted ? ' You can edit your report until then.' : '') + '</div></div>';
+    else if (w.state === 'late') banner = '<div class="banner late"><div>The deadline (' + esc(w.deadlineLabel) + ') has passed. Late reports are recorded but ' + (season.lateCounts ? 'still count.' : 'only count if the organizers accept them.') + '</div></div>';
+    else if (w.state === 'upcoming') banner = '<div class="banner upcoming"><div>This week’s report opens <b>' + esc(w.opensLabel) + '</b>.</div></div>';
+    else banner = '<div class="banner closed"><div>This week closed <b>' + esc(w.deadlineLabel) + '</b>. ' + (w.submitted ? 'Here’s what you filed.' : 'No report was filed.') + '</div></div>';
+
+    var meetWk = onceEarned(r, 'meetup', S.week), goalWk = onceEarned(r, 'personal_goal', S.week), bonusWk = onceEarned(r, 'bonus', S.week);
+    var html = quoteHtml() +
+      '<h2>' + esc(sw.label || ('Week ' + S.week)) + ' Report</h2><p class="lede">' + esc(sw.range || '') + ' · Reporting as <b>' + esc(r.participant.name) + '</b> (@' + esc(r.participant.username) + ')</p>' +
+      '<div class="weeks">' + chips + '</div>' + banner +
+      '<form id="reportForm" autocomplete="off">' +
+      card('Physical activity', P.physical + ' pts / day', 'Days this week you got at least 60 minutes of physical activity.', pips('pa_days', d.pa_days, editable)) +
+      card('Good deed', P.deed + ' pts / day', 'Days this week you performed a good deed.', pips('deed_days', d.deed_days, editable)) +
+      card('Weekly Agon', P.agon + ' pts', 'Did you complete this week’s Agon?', yesno('agon', d.agon, editable)) +
+      card('Badge requirement', P.badge + ' pts', 'One requirement you haven’t completed before. Every part of it must be done. An Agon can’t double as your badge requirement.',
+        yesno('badge_done', d.badge_done, editable) + '<div id="badgeBox"' + (d.badge_done ? '' : ' hidden') + ' style="margin-top:12px"></div>') +
+      card('AGFT score', 'up to ' + season.agftMax, 'Only if you attempted it this week. Your best score of the season counts once.' + (season.links.agftChart ? ' <a href="' + esc(season.links.agftChart) + '" target="_blank" rel="noopener">Score chart</a>' : ''),
+        '<input type="number" name="agft" min="0" max="' + season.agftMax + '" step="1" inputmode="numeric" placeholder="Leave blank if not attempted" value="' + esc(d.agft) + '"' + (editable ? '' : ' disabled') + ' style="max-width:260px">') +
+      card('TSL meet-up', P.meetup + ' pts once', 'Attended (or hosted) a TSL meet-up. Counts once per season.' + (meetWk ? ' <b>Already earned in week ' + meetWk + '.</b>' : ''), yesno('meetup', d.meetup, editable), !!meetWk) +
+      card('Personal goal', P.personalGoal + ' pts once', 'Completed your ENTIRE SMARTER personal goal and posted evidence.' + (season.links.personalGoalsThread ? ' <a href="' + esc(season.links.personalGoalsThread) + '" target="_blank" rel="noopener">Goals thread</a>' : '') + (goalWk ? ' <b>Already earned in week ' + goalWk + '.</b>' : ''), yesno('personal_goal', d.personal_goal, editable), !!goalWk) +
+      (season.bonus.revealed
+        ? card(season.bonus.name, P.bonus + ' pts once', (season.bonus.description ? esc(season.bonus.description) + ' ' : '') + 'Completed the entire challenge.' + (bonusWk ? ' <b>Already earned in week ' + bonusWk + '.</b>' : ''), yesno('bonus', d.bonus, editable), !!bonusWk)
+        : '<div class="card compact muted small">✦ A bonus challenge worth ' + P.bonus + ' pts will be revealed' + (season.bonus.revealLabel ? ' ' + esc(season.bonus.revealLabel) : ' soon') + '.</div>') +
+      '<div class="tally"><div><div class="num" id="tallyNum">0</div><div class="cap">points this report</div></div>' +
+      (editable ? '<button class="btn gold" type="submit" id="submitBtn">' + (w.submitted ? 'Update report' : 'File report') + '</button>' : '') + '</div>' +
+      '</form>';
+    el.innerHTML = html;
+
+    $all('.week-chip', el).forEach(function (b) { b.addEventListener('click', function () { S.week = Number(b.dataset.week); S.draft = null; drawReport(el, r); }); });
+    bindPips(el, editable); bindYesNo(el, editable);
+    var agft = $('input[name=agft]', el);
+    if (agft) agft.addEventListener('input', function () { d.agft = agft.value; updateTally(); });
+    if (agft) agft.addEventListener('change', function () { if (Number(agft.value) > 0) trSays(); });
+    if (d.badge_done) mountBadgePicker($('#badgeBox', el), editable, r, S.week);
+    var form = $('#reportForm', el);
+    form.addEventListener('submit', function (e) { e.preventDefault(); submitReport(el); });
+    updateTally();
+    tick();
+  }
+  function shortDate(label) { return String(label || '').replace(/,.*$/, ''); }
+
+  function card(title, pts, hint, control, earned) {
+    return '<div class="card task' + (earned ? ' once-earned' : '') + '"><div class="label">' + esc(title) + '</div><div class="pts">' + esc(pts) + '</div>' +
+      '<div class="hint">' + hint + '</div><div class="control">' + control + '</div></div>';
+  }
+  function pips(name, val, editable) {
+    var days = ['Sa', 'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr'];
+    var h = '<div class="pips" data-pips="' + name + '" role="group" aria-label="Number of days">';
+    h += '<button type="button" class="pip zero' + (val === 0 ? ' on' : '') + '" data-n="0"' + (editable ? '' : ' disabled') + '>None</button>';
+    for (var i = 1; i <= 7; i++) h += '<button type="button" class="pip' + (i <= val ? ' on' : '') + '" data-n="' + i + '" title="' + i + ' day' + (i > 1 ? 's' : '') + '" aria-label="' + i + ' day' + (i > 1 ? 's' : '') + '"' + (editable ? '' : ' disabled') + '>' + days[i - 1] + '</button>';
+    return h + '<span class="count">' + val + ' / 7</span></div>';
+  }
+  function bindPips(el, editable) {
+    if (!editable) return;
+    $all('[data-pips]', el).forEach(function (g) {
+      var name = g.dataset.pips;
+      $all('.pip', g).forEach(function (p) {
+        p.addEventListener('click', function () {
+          var n = Number(p.dataset.n);
+          if (n > S.draft[name]) trSays();
+          S.draft[name] = n;
+          $all('.pip', g).forEach(function (q) { var k = Number(q.dataset.n); q.classList.toggle('on', k === 0 ? n === 0 : k <= n); });
+          $('.count', g).textContent = n + ' / 7';
+          updateTally();
+        });
+      });
+    });
+  }
+  function yesno(name, val, editable) {
+    var dis = editable ? '' : ' disabled';
+    return '<div class="yesno" data-yn="' + name + '" role="group"><button type="button" data-v="yes" class="' + (val ? 'on' : '') + '" aria-pressed="' + !!val + '"' + dis + '>Yes</button>' +
+      '<button type="button" data-v="no" class="' + (val ? '' : 'on') + '" aria-pressed="' + !val + '"' + dis + '>No</button></div>';
+  }
+  function bindYesNo(el, editable) {
+    if (!editable) return;
+    $all('[data-yn]', el).forEach(function (g) {
+      var name = g.dataset.yn;
+      $all('button', g).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var v = b.dataset.v === 'yes';
+          if (v && !S.draft[name]) trSays();
+          S.draft[name] = v;
+          $all('button', g).forEach(function (x) { var on = (x.dataset.v === 'yes') === v; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+          if (name === 'badge_done') {
+            var box = $('#badgeBox', el);
+            box.hidden = !v;
+            if (v && !box.dataset.mounted) mountBadgePicker(box, true, S.record, S.week);
+          }
+          updateTally();
+        });
+      });
+    });
+  }
+  function updateTally() {
+    var d = S.draft, P = S.boot.season.points, t = 0, r = S.record;
+    t += d.pa_days * P.physical + d.deed_days * P.deed + (d.agon ? P.agon : 0) + (d.badge_done ? P.badge : 0);
+    if (d.meetup && !onceEarned(r, 'meetup', d.week)) t += P.meetup;
+    if (d.personal_goal && !onceEarned(r, 'personal_goal', d.week)) t += P.personalGoal;
+    if (d.bonus && S.boot.season.bonus.revealed && !onceEarned(r, 'bonus', d.week)) t += P.bonus;
+    var n = $('#tallyNum'); if (n) n.textContent = fmtN(t) + (Number(d.agft) > 0 ? ' + AGFT' : '');
+  }
+
+  function submitReport(el) {
+    var d = S.draft, btn = $('#submitBtn');
+    if (d.badge_done && !String(d.badge_requirement).trim()) { toast('Pick or type the badge requirement you completed.', true); var i = $('#badgeInput'); if (i) i.focus(); return; }
+    var payload = Object.assign({ participantId: S.me }, d);
+    busy(btn, true, 'Filing…');
+    call('submitCheckin', payload).then(function (res) {
+      S.record = res.record; S.standings = null; S.draft = null;
+      toast(res.late ? 'Filed — flagged as late.' : 'Report filed. Strenuously done!');
+      trSays();
+      drawReport(el, res.record);
+    }).catch(function (e) { busy(btn, false); toast(errMsg(e), true); });
+  }
+
+  // ------------------------------------------------------------ badge requirement typeahead
+  function mountBadgePicker(box, editable, r, wk) {
+    box.dataset.mounted = '1';
+    var reqs = S.boot.badgeRequirements || [];
+    var byId = {}; reqs.forEach(function (q) { byId[q.id] = q; });
+    var past = (r.pastBadgeRequirements || []).filter(function (p) { return p.week !== wk; });
+    var pastIds = {}; past.forEach(function (p) { if (p.id) pastIds[p.id] = p.week; });
+    box.innerHTML = '<div class="ta"><input type="text" id="badgeInput" role="combobox" aria-expanded="false" aria-controls="badgeList" aria-autocomplete="list" placeholder="Search badges or requirements — e.g. “knot”, “clove hitch”, “Barbell 2”"' + (editable ? '' : ' disabled') + '>' +
+      '<ul class="ta-list" id="badgeList" role="listbox" hidden></ul></div><div id="badgePicked"></div>';
+    var input = $('#badgeInput', box), list = $('#badgeList', box), picked = $('#badgePicked', box);
+    var items = [], active = -1;
+
+    function showPicked() {
+      var d = S.draft;
+      if (!d.badge_requirement) { picked.innerHTML = ''; return; }
+      var q = d.badge_requirement_id && byId[d.badge_requirement_id];
+      var dup = d.badge_requirement_id && pastIds[d.badge_requirement_id];
+      picked.innerHTML = '<div class="picked">' + (q
+        ? '<span class="b">' + esc(q.badge) + '</span> <span class="muted">— ' + esc(q.requirement) + '</span>' +
+          '<details><summary>Full requirement</summary><div class="small" style="margin-top:6px">' + esc(q.text) + '</div></details>' +
+          (/\([a-z]+\)|▪/.test(q.text) ? '<div class="note-all">This requirement has several parts. Every part must be done to count it.</div>' : '')
+        : '<span class="b">Your entry:</span> ' + esc(d.badge_requirement)) +
+        (dup ? '<div class="note-all">You already logged this requirement in week ' + dup + '. Each week should be a new requirement.</div>' : '') +
+        (editable ? '<div style="margin-top:8px"><button type="button" class="btn ghost" id="badgeClear" style="padding:6px 12px">Change</button></div>' : '') + '</div>';
+      var c = $('#badgeClear', picked);
+      if (c) c.addEventListener('click', function () { d.badge_requirement = ''; d.badge_requirement_id = ''; input.value = ''; input.hidden = false; showPicked(); input.focus(); });
+      input.hidden = !!d.badge_requirement && editable;
+      if (!editable) input.hidden = true;
+    }
+    function search(q) {
+      var toks = q.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(String);
+      if (!toks.length) return [];
+      var out = [];
+      reqs.forEach(function (r, i) {
+        var badge = r.badge.toLowerCase(), label = r.requirement.toLowerCase(), hay = badge + ' ' + label + ' ' + label.replace(/\D/g, '') + ' ' + r.text.toLowerCase();
+        var score = 0;
+        for (var t = 0; t < toks.length; t++) {
+          var k = toks[t];
+          if (hay.indexOf(k) === -1) return;
+          if (badge.indexOf(k) === 0) score += 4; else if (badge.indexOf(k) > -1) score += 3;
+          else if (/^\d+$/.test(k) && label.replace(/\D/g, '') === k) score += 3;
+          else score += 1;
+          if (new RegExp('\\b' + k + '\\b').test(hay)) score += 1; // whole-word beats substring (clove hitch vs cloves)
+        }
+        if (toks.length > 1 && hay.indexOf(toks.join(' ')) > -1) score += 2; // exact phrase
+        out.push({ r: r, s: score, i: i });
+      });
+      out.sort(function (a, b) { return b.s - a.s || a.i - b.i; });
+      return out.slice(0, 12).map(function (x) { return x.r; });
+    }
+    function render() {
+      var q = input.value.trim();
+      var html = '';
+      items = [];
+      if (!q && past.length) {
+        html += '<li class="grp" aria-disabled="true">Logged in earlier weeks</li>';
+        past.forEach(function (p) { items.push({ id: p.id || '', text: p.text }); html += opt(items.length - 1, p.id && byId[p.id], p.text, 'Week ' + p.week); });
+      }
+      search(q).forEach(function (r) { items.push({ id: r.id, text: r.badge + ' — ' + r.requirement + ': ' + r.text }); html += opt(items.length - 1, r, null, pastIds[r.id] ? 'logged wk ' + pastIds[r.id] : ''); });
+      if (q) { items.push({ id: '', text: q }); html += '<li class="free" role="option" data-i="' + (items.length - 1) + '">Use “<b>' + esc(q) + '</b>” as typed</li>'; }
+      if (!html) html = '<li class="grp">Start typing a badge name or a word from the requirement…</li>';
+      list.innerHTML = html; list.hidden = false; input.setAttribute('aria-expanded', 'true');
+      active = items.length && q ? 0 : -1; highlight();
+      $all('li[data-i]', list).forEach(function (li) {
+        li.addEventListener('mousedown', function (e) { e.preventDefault(); choose(Number(li.dataset.i)); });
+      });
+    }
+    function opt(i, r, rawText, tag) {
+      if (r) return '<li role="option" data-i="' + i + '"><span class="b">' + esc(r.badge) + '</span><span class="r">' + esc(r.requirement) + '</span>' + (tag ? ' <span class="muted small">· ' + esc(tag) + '</span>' : '') + '<span class="t">' + esc(r.text) + '</span></li>';
+      return '<li role="option" data-i="' + i + '"><span class="b">' + esc(rawText) + '</span>' + (tag ? ' <span class="muted small">· ' + esc(tag) + '</span>' : '') + '</li>';
+    }
+    function highlight() { $all('li[data-i]', list).forEach(function (li) { li.classList.toggle('active', Number(li.dataset.i) === active); if (Number(li.dataset.i) === active) li.scrollIntoView({ block: 'nearest' }); }); }
+    function choose(i) {
+      var it = items[i]; if (!it) return;
+      S.draft.badge_requirement = it.text; S.draft.badge_requirement_id = it.id; trSays();
+      list.hidden = true; input.setAttribute('aria-expanded', 'false'); showPicked();
+    }
+    input.addEventListener('input', render);
+    input.addEventListener('focus', render);
+    input.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; input.setAttribute('aria-expanded', 'false'); }, 120); });
+    input.addEventListener('keydown', function (e) {
+      if (list.hidden) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(items.length - 1, active + 1); highlight(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); highlight(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (active > -1) choose(active); }
+      else if (e.key === 'Escape') { list.hidden = true; }
+    });
+    showPicked();
+  }
+
+  // ------------------------------------------------------------ standings
+  function renderStandings() {
+    var el = $('#view-standings');
+    if (!S.standings) el.innerHTML = '<div class="loading">Tallying the scores…</div>';
+    call('getStandings').then(function (s) { S.standings = s; drawStandings(el); })
+      .catch(function (e) { el.innerHTML = '<div class="card">' + esc(errMsg(e)) + '</div>'; });
+    if (S.standings) drawStandings(el);
+  }
+  function drawStandings(el) {
+    var s = S.standings, tab = S.standTab;
+    var segs = [['individuals', 'Individuals'], ['teams', 'Teams'], ['agft', 'Top AGFT']].map(function (x) {
+      return '<button type="button" data-tab="' + x[0] + '" aria-pressed="' + (tab === x[0]) + '">' + x[1] + '</button>';
+    }).join('');
+    var html = quoteHtml() + '<h2>Standings</h2><p class="lede small">Updated ' + esc(s.generatedLabel || '') + ' · A perfect score is ' + fmtN(s.perfectScore) + '.</p>' +
+      '<div class="row"><div class="seg" role="group">' + segs + '</div><div class="grow"></div>' +
+      '<input type="search" id="standSearch" placeholder="Search" value="' + esc(S.standQuery) + '" style="max-width:220px;margin-bottom:14px"></div><div id="standBody"></div>';
+    el.innerHTML = html;
+    $all('.seg button', el).forEach(function (b) { b.addEventListener('click', function () { S.standTab = b.dataset.tab; drawStandings(el); }); });
+    $('#standSearch', el).addEventListener('input', function (e) { S.standQuery = e.target.value; drawStandBody(); });
+    drawStandBody();
+  }
+  function medal(rank) { return rank <= 3 ? '<span class="medal s' + rank + '">' + rank + '</span>' : rank; }
+  function drawStandBody() {
+    var s = S.standings, q = S.standQuery.trim().toLowerCase(), body = $('#standBody');
+    function match(n) { return !q || String(n).toLowerCase().indexOf(q) > -1; }
+    var html = '';
+    if (S.standTab === 'individuals') {
+      var rows = s.individuals.filter(function (p) { return match(p.name) || match(p.username); });
+      html = '<div class="card" style="padding:6px 10px">' + (rows.length ? '<table class="board"><thead><tr><th>#</th><th>Name</th><th class="hide-sm sc">Weeks</th><th class="sc">Score</th></tr></thead><tbody>' +
+        rows.map(function (p) {
+          return '<tr class="' + (p.id === S.me ? 'me' : '') + (p.rank === 1 ? ' top1' : '') + '"><td class="rk">' + medal(p.rank) + '</td><td>' + esc(p.name) + '<div class="muted small">@' + esc(p.username) + '</div></td><td class="hide-sm sc muted">' + p.weeksReported + '</td><td class="sc">' + fmtN(p.total) + '</td></tr>';
+        }).join('') + '</tbody></table>' : '<div class="empty">No one yet.</div>') + '</div>';
+    } else if (S.standTab === 'teams') {
+      html = teamTable('Official teams', s.teamsOfficial, q, 'At least ' + S.boot.season.minOfficialTeamSize + ' members. Team score = average of members’ scores.') +
+        teamTable('Unofficial teams (too small)', s.teamsUnofficial, q, '');
+    } else {
+      var a = s.agft.filter(function (p) { return match(p.name); });
+      html = '<div class="card" style="padding:6px 10px">' + (a.length ? '<table class="board"><thead><tr><th>#</th><th>Name</th><th class="sc">Best AGFT</th></tr></thead><tbody>' +
+        a.map(function (p) { return '<tr class="' + (p.id === S.me ? 'me' : '') + '"><td class="rk">' + medal(p.rank) + '</td><td>' + esc(p.name) + '</td><td class="sc">' + fmtN(p.agft) + '</td></tr>'; }).join('') +
+        '</tbody></table>' : '<div class="empty">No AGFT scores reported yet.</div>') + '</div>';
+    }
+    body.innerHTML = html;
+    $all('tr.expandable', body).forEach(function (tr) {
+      tr.addEventListener('click', function () { S.expanded[tr.dataset.team] = !S.expanded[tr.dataset.team]; drawStandBody(); });
+    });
+  }
+  function teamTable(title, teams, q, note) {
+    var rows = teams.filter(function (t) { return !q || t.name.toLowerCase().indexOf(q) > -1 || t.members.some(function (m) { return m.name.toLowerCase().indexOf(q) > -1; }); });
+    var h = '<h3 style="margin-top:8px">' + esc(title) + '</h3>' + (note ? '<p class="muted small" style="margin-top:-4px">' + esc(note) + ' Tap a team to see its roster.</p>' : '');
+    h += '<div class="card" style="padding:6px 10px">';
+    if (!rows.length) return h + '<div class="empty">None.</div></div>';
+    h += '<table class="board"><thead><tr><th>#</th><th>Team</th><th class="sc hide-sm">Members</th><th class="sc">Score</th></tr></thead><tbody>';
+    rows.forEach(function (t) {
+      var mine = t.members.some(function (m) { return m.id === S.me; });
+      var key = title + '|' + t.name;
+      h += '<tr class="expandable' + (mine ? ' me' : '') + '" data-team="' + esc(key) + '"><td class="rk">' + medal(t.rank) + '</td><td><b>' + esc(t.name) + '</b> <span class="muted small">' + (S.expanded[key] ? '▴' : '▾') + '</span></td><td class="sc hide-sm muted">' + t.size + '</td><td class="sc">' + fmtN(t.score) + '</td></tr>';
+      if (S.expanded[key]) {
+        h += '<tr class="members"><td></td><td colspan="3">' + t.members.map(function (m) {
+          return (m.id === t.leaderId ? '★ ' : '') + esc(m.name) + ' <span class="muted">' + fmtN(m.total) + '</span>';
+        }).join(' · ') + '</td></tr>';
+      }
+    });
+    return h + '</tbody></table></div>';
+  }
+
+  // ------------------------------------------------------------ my record
+  function renderRecord() {
+    var el = $('#view-record');
+    if (!S.me) return needMe(el, 'see your record');
+    el.innerHTML = '<div class="loading">Opening your service record…</div>';
+    ensureRecord().then(function (r) { drawRecord(el, r); }).catch(function (e) { el.innerHTML = '<div class="card">' + esc(errMsg(e)) + '</div>'; });
+  }
+  function drawRecord(el, r) {
+    var s = r.score, season = S.boot.season, perfect = season.perfectScore;
+    var stats = [['Physical activity', s.physical], ['Good deeds', s.deeds], ['Agons', s.agons], ['Badge reqs', s.badges], ['Best AGFT', s.agft], ['Meet-up', s.meetup], ['Personal goal', s.personalGoal], [season.bonus.revealed ? season.bonus.name : 'Bonus', s.bonus]];
+    var html = quoteHtml() + '<h2>' + esc(r.participant.name) + '</h2><p class="lede">@' + esc(r.participant.username) + '</p><div data-name-edit style="margin:-8px 0 16px"></div>' +
+      '<div class="card"><div class="bigscore"><span class="v">' + fmtN(s.total) + '</span><span class="muted">of ' + fmtN(perfect) + ' possible</span></div>' +
+      '<div class="meter"><i style="width:' + Math.min(100, Math.round(100 * s.total / Math.max(1, perfect))) + '%"></i></div>' +
+      (season.lateCounts ? '' : '<div class="muted small">Late reports aren’t included until the organizers accept them.</div>') + '</div>' +
+      '<div class="stats">' + stats.map(function (x) { return '<div class="stat"><div class="k">' + esc(x[0]) + '</div><div class="v">' + fmtN(x[1]) + '</div></div>'; }).join('') + '</div>' +
+      '<hr class="rule"><h3>Teams</h3>' +
+      (r.teams.length ? '<div class="chips">' + r.teams.map(function (t) { return '<span class="chip' + (t.leader ? ' leader' : '') + '"' + (t.active ? '' : ' style="opacity:.5;text-decoration:line-through"') + '>' + esc(t.team) + '</span>'; }).join('') + '</div>' + (r.teams.some(function (t) { return t.leader; }) ? '<p class="muted small">★ = you’re the team leader.</p>' : '') : '<p class="muted">Competing as an individual.</p>') +
+      (r.teamJoin.state === 'open' ? '<p><button class="btn ghost" type="button" data-go="enlist">Join more teams</button></p>' : '') +
+      '<hr class="rule"><h3>Weekly reports</h3><div class="card" style="padding:6px 10px"><table class="board"><thead><tr><th>Week</th><th>Status</th><th class="sc">Due</th></tr></thead><tbody>' +
+      r.weeks.map(function (w) {
+        var st = w.submitted ? (w.checkin.late ? '<span style="color:var(--warn)">Filed late</span>' : '<span style="color:var(--ok)">Filed ✓</span>') : (w.state === 'closed' ? '<span class="muted">Missed</span>' : w.state === 'upcoming' ? '<span class="muted">Not open</span>' : '<b>Due</b>');
+        return '<tr class="expandable" data-week="' + w.week + '"><td class="rk">' + w.week + '</td><td>' + st + (w.checkin && w.checkin.badge_requirement ? '<div class="muted small">' + esc(w.checkin.badge_requirement).slice(0, 90) + '</div>' : '') + '</td><td class="sc small muted">' + esc(w.deadlineLabel) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    el.innerHTML = html;
+    nameEditor(el, r.participant.name);
+    var g = $('[data-go]', el); if (g) g.addEventListener('click', function () { go('enlist'); });
+    $all('tr[data-week]', el).forEach(function (tr) { tr.addEventListener('click', function () { S.week = Number(tr.dataset.week); S.draft = null; go('report'); }); });
+  }
+
+  function nameEditor(el, current) {
+    var box = $('[data-name-edit]', el);
+    if (!box) return;
+    box.innerHTML = '<button type="button" class="btn ghost" style="padding:6px 12px" data-edit-name>Edit name</button>';
+    $('[data-edit-name]', box).addEventListener('click', function () {
+      box.innerHTML = '<form class="row" data-name-form style="margin-top:4px"><input type="text" name="n" maxlength="80" value="' + esc(current) + '" class="grow" style="max-width:320px" aria-label="Your name">' +
+        '<button class="btn" type="submit" style="padding:9px 16px">Save</button><button class="btn ghost" type="button" data-cancel style="padding:9px 16px">Cancel</button></form>';
+      var f = $('[data-name-form]', box), input = f.n;
+      input.focus(); input.select();
+      $('[data-cancel]', box).addEventListener('click', function () { nameEditor(el, current); });
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = $('button[type=submit]', f);
+        busy(btn, true, 'Saving\u2026');
+        call('renameParticipant', { participantId: S.me, name: input.value }).then(function (res) {
+          applyBoot(res.bootstrap); S.record = res.record; S.standings = null;
+          toast('Name updated to ' + res.record.participant.name + '.');
+          go(S.view);
+        }).catch(function (err) { busy(btn, false); toast(errMsg(err), true); });
+      });
+    });
+  }
+
+  // ------------------------------------------------------------ enlist & teams
+  function renderEnlist() {
+    var el = $('#view-enlist'), reg = S.boot.registration, season = S.boot.season;
+    var banner;
+    if (reg.state === 'open') banner = '<div class="banner open"><div>Registration is open until <b>' + esc(reg.closesLabel) + '</b> — <b data-until="' + reg.closes + '">' + until(reg.closes - now()) + '</b> left.</div></div>';
+    else if (reg.state === 'upcoming') banner = '<div class="banner upcoming"><div>Registration opens <b>' + esc(reg.opensLabel) + '</b>.</div></div>';
+    else banner = '<div class="banner closed"><div>Registration closed <b>' + esc(reg.closesLabel) + '</b>.' + (reg.teamJoinState === 'open' ? ' Enlisted members can still join teams until <b>' + esc(reg.teamJoinClosesLabel) + '</b>.' : '') + '</div></div>';
+
+    var me = S.me && participant(S.me);
+    var html = quoteHtml(0) + '<h2>Enter the arena</h2><p class="lede">You can compete as an individual, but it’s far more fun with a team. ' +
+      (season.allowMultipleTeams ? 'You may join more than one team.' : 'This season, each person joins one team.') + ' Start a new team and you become its leader.</p>' + banner;
+
+    if (me) {
+      html += '<div class="card"><h3>You’re enlisted</h3><p style="margin-top:0"><b>' + esc(me.name) + '</b> <span class="muted">@' + esc(me.username) + '</span></p><div data-name-edit style="margin:-6px 0 12px"></div><div id="joinBox"></div></div>';
+    }
+    if (reg.state === 'open' && !me) {
+      html += '<div class="card"><h3>Enlist for ' + esc(season.name) + '</h3>' +
+        '<form id="signupForm" autocomplete="off">' +
+        '<label class="field"><span>Your name</span><input type="text" name="name" maxlength="80" required placeholder="First and last name"></label>' +
+        '<label class="field"><span>Your TSL username</span><input type="text" name="username" maxlength="60" required placeholder="@your-username"></label>' +
+        '<div class="field"><span style="font-weight:600;display:block;margin-bottom:6px">Team' + (season.allowMultipleTeams ? '(s)' : '') + ' <span class="muted small">(optional)</span></span>' + teamPicker('signup') + '</div>' +
+        '<button class="btn block" type="submit" id="signupBtn">Enlist</button></form></div>';
+    } else if (!me) {
+      html += '<div class="card"><p style="margin:0">Already enlisted? <a href="#" data-who>Find your name</a> to report or join teams.</p></div>';
+    }
+    el.innerHTML = html;
+    var w = $('[data-who]', el); if (w) w.addEventListener('click', function (e) { e.preventDefault(); openWho(); });
+    if (reg.state === 'open' && !me) { bindTeamPicker(el, 'signup'); $('#signupForm', el).addEventListener('submit', doSignup); }
+    if (me) { drawJoin(); nameEditor(el, me.name); }
+    tick();
+  }
+
+  function drawJoin() {
+    var box = $('#joinBox');
+    if (!box) return;
+    box.innerHTML = '<div class="muted small">Loading your teams…</div>';
+    ensureRecord().then(function (r) {
+      var mine = r.teams.map(function (t) { return t.team; });
+      var canLeave = r.teamJoin.state === 'open';
+      var h = mine.length ? '<div class="my-teams">' + r.teams.map(function (t) {
+        return '<div class="my-team"><span class="chip' + (t.leader ? ' leader' : '') + '"' + (t.active ? '' : ' style="opacity:.5;text-decoration:line-through"') + '>' + esc(t.team) + '</span>' +
+          (canLeave && t.active ? '<button type="button" class="link-btn" data-leave="' + esc(t.team) + '" data-leader="' + (t.leader ? 1 : 0) + '">Leave</button>' : '') + '</div>';
+      }).join('') + '</div>' : '<p class="muted small" style="margin:0">You’re competing as an individual.</p>';
+      if (r.teamJoin.state === 'open' && (S.boot.season.allowMultipleTeams || !mine.length)) {
+        h += '<hr class="rule" style="margin:16px 0"><h3>Join ' + (mine.length ? 'more teams' : 'a team') + '</h3><p class="muted small" style="margin-top:-4px">Open until ' + esc(r.teamJoin.closesLabel) + '.</p>' +
+          teamPicker('join', mine) + '<button class="btn" type="button" id="joinBtn" style="margin-top:12px">Join</button>';
+      } else if (r.teamJoin.state === 'closed') {
+        h += '<p class="muted small">Team changes are closed. Contact the organizers if something needs fixing.</p>';
+      }
+      box.innerHTML = h;
+      $all('[data-leave]', box).forEach(function (b) { b.addEventListener('click', function () { doLeave(b); }); });
+      if ($('#joinBtn', box)) {
+        bindTeamPicker(box, 'join', mine);
+        $('#joinBtn', box).addEventListener('click', doJoin);
+      }
+    }).catch(function (e) { box.innerHTML = '<div class="small">' + esc(errMsg(e)) + '</div>'; });
+  }
+
+  function doLeave(btn) {
+    var team = btn.dataset.leave;
+    var msg = 'Leave ' + team + '?' + (btn.dataset.leader === '1' ? '\n\nYou\u2019re the team leader \u2014 leadership will pass to the member who joined earliest.' : '') +
+      '\n\nYou can rejoin until team changes close.';
+    if (!window.confirm(msg)) return;
+    busy(btn, true, 'Leaving\u2026');
+    call('leaveTeam', { participantId: S.me, team: team }).then(function (res) {
+      applyBoot(res.bootstrap); S.record = res.record; S.standings = null;
+      toast('You left ' + res.left + '.' + (res.newLeader ? ' ' + res.newLeader + ' is now team leader.' : ''));
+      drawJoin();
+    }).catch(function (err) { busy(btn, false); toast(errMsg(err), true); });
+  }
+
+  function teamPicker(kind, mine) {
+    return '<input type="search" class="team-search" data-kind="' + kind + '" placeholder="Search teams">' +
+      '<div class="team-list" data-kind="' + kind + '"></div><div class="chips" data-chips="' + kind + '"></div>' +
+      '<label class="field" style="margin:12px 0 0"><span class="small">Not listed? Start a new team</span><input type="text" class="new-team" data-kind="' + kind + '" maxlength="60" placeholder="New team name"></label>';
+  }
+  function bindTeamPicker(root, kind, mine) {
+    var sel = kind === 'signup' ? S.signupTeams : S.joinTeams;
+    sel.length = 0;
+    var mineKeys = {}; (mine || []).forEach(function (t) { mineKeys[t.toLowerCase()] = true; });
+    var search = $('.team-search[data-kind=' + kind + ']', root), list = $('.team-list[data-kind=' + kind + ']', root), chips = $('[data-chips=' + kind + ']', root);
+    var single = !S.boot.season.allowMultipleTeams;
+    function draw() {
+      var q = search.value.trim().toLowerCase();
+      var teams = S.boot.teams.filter(function (t) { return !q || t.name.toLowerCase().indexOf(q) > -1; });
+      list.innerHTML = teams.length ? teams.map(function (t) {
+        var isMine = mineKeys[t.name.toLowerCase()], on = sel.indexOf(t.name) > -1;
+        return '<label class="team-row' + (isMine ? ' mine' : '') + '"><input type="' + (single ? 'radio' : 'checkbox') + '" name="team-' + kind + '" value="' + esc(t.name) + '"' + (on || isMine ? ' checked' : '') + (isMine ? ' disabled' : '') + '>' +
+          '<span class="n">' + esc(t.name) + '</span><span class="m">' + (isMine ? 'joined' : t.members + ' member' + (t.members === 1 ? '' : 's') + (t.leader ? ' · ★ ' + esc(t.leader) : '')) + '</span></label>';
+      }).join('') : '<div class="empty small">' + (S.boot.teams.length ? 'No team matches — start a new one below.' : 'No teams yet — start the first one below.') + '</div>';
+      $all('input', list).forEach(function (i) {
+        i.addEventListener('change', function () {
+          if (single) sel.length = 0;
+          var k = sel.indexOf(i.value);
+          if (i.checked && k === -1) sel.push(i.value); else if (!i.checked && k > -1) sel.splice(k, 1);
+          if (single) draw();
+          drawChips();
+        });
+      });
+    }
+    function drawChips() { chips.innerHTML = sel.map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join(''); }
+    search.addEventListener('input', draw);
+    draw(); drawChips();
+  }
+
+  function doSignup(e) {
+    e.preventDefault();
+    var f = e.target, btn = $('#signupBtn');
+    var payload = { name: f.name.value, username: f.username.value, teams: S.signupTeams.slice(), newTeam: $('.new-team[data-kind=signup]').value };
+    if (!S.boot.season.allowMultipleTeams && payload.teams.length && payload.newTeam.trim()) { toast('Pick one team or start a new one, not both.', true); return; }
+    busy(btn, true, 'Enlisting…');
+    call('signup', payload).then(function (res) {
+      applyBoot(res.bootstrap);
+      S.me = res.participant.id; store(LS_KEY, S.me); S.record = null; S.standings = null; renderWho();
+      toast('Welcome to ' + S.boot.season.name + ', ' + res.participant.name.split(' ')[0] + '!' + (res.joined.length ? ' Joined: ' + res.joined.join(', ') + '.' : ''));
+      go('enlist');
+    }).catch(function (err) { busy(btn, false); toast(errMsg(err), true); });
+  }
+  function doJoin() {
+    var btn = $('#joinBtn');
+    var payload = { participantId: S.me, teams: S.joinTeams.slice(), newTeam: $('.new-team[data-kind=join]').value };
+    if (!payload.teams.length && !payload.newTeam.trim()) { toast('Pick a team or enter a new team name.', true); return; }
+    busy(btn, true, 'Joining…');
+    call('joinTeams', payload).then(function (res) {
+      applyBoot(res.bootstrap); S.record = res.record; S.standings = null;
+      toast(res.joined.length ? 'Joined ' + res.joined.join(', ') + '.' : 'You were already on those teams.');
+      drawJoin();
+    }).catch(function (err) { busy(btn, false); toast(errMsg(err), true); });
+  }
+
+  // ------------------------------------------------------------ rules
+  function renderRules() {
+    var season = S.boot.season, P = season.points, L = season.links, n = season.weeks.length;
+    function link(href, text) { return href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(text) + '</a>' : esc(text); }
+    var html = quoteHtml(1) + '<h2>Rules of the games</h2><p class="lede">' + esc(season.name) + ' runs ' + esc(season.startLabel) + ' – ' + esc(season.endLabel) + '. File a report for each of the ' + n + ' weeks. Everything runs on the honor system: keep your honor strenuously.</p>' +
+      '<div class="card"><h3>Scoring</h3><table class="points-table"><tbody>' +
+      '<tr><td>Daily physical activity (60+ min)</td><td>' + P.physical + ' / day</td></tr>' +
+      '<tr><td>Daily good deed</td><td>' + P.deed + ' / day</td></tr>' +
+      '<tr><td>Weekly Agon</td><td>' + P.agon + ' / week</td></tr>' +
+      '<tr><td>Badge requirement</td><td>' + P.badge + ' / week</td></tr>' +
+      '<tr><td>AGFT (best score of the season)</td><td>up to ' + season.agftMax + '</td></tr>' +
+      '<tr><td>Join a TSL meet-up</td><td>' + P.meetup + ' once</td></tr>' +
+      '<tr><td>Personal goal</td><td>' + P.personalGoal + ' once</td></tr>' +
+      '<tr><td>' + esc(season.bonus.revealed ? season.bonus.name : 'Bonus challenge (revealed at the start)') + '</td><td>' + P.bonus + ' once</td></tr>' +
+      '<tr><td><b>Perfect score</b></td><td>' + fmtN(season.perfectScore) + '</td></tr></tbody></table></div>' +
+      '<div class="card"><h3>Deadlines</h3><ul class="rules-list">' +
+      '<li>Registration closes <b>' + esc(S.boot.registration.closesLabel || 'TBA') + '</b>.</li>' +
+      season.weeks.map(function (w) { return '<li>' + esc(w.label) + ' (' + esc(w.range) + '): due <b>' + esc(w.deadlineLabel) + '</b></li>'; }).join('') +
+      '<li>' + (season.allowLate ? 'Late reports are recorded but flagged' + (season.lateCounts ? ' (they still count).' : ' and only count if accepted.') : 'Late reports are not accepted.') + '</li></ul></div>' +
+      '<div class="card"><h3>Badge requirements</h3><ul class="rules-list">' +
+      '<li>Each week’s requirement should be one you haven’t completed before.</li>' +
+      '<li>If a requirement has several parts or options, you must finish <b>all</b> of them to count it.</li>' +
+      '<li>No double-dipping: an Agon that is also a badge requirement doesn’t count as your badge requirement. The same goes for a personal goal that involves a badge. Use your phronesis.</li>' +
+      '<li>Community Badges are allowed.' + (L.communityBadges ? ' ' + link(L.communityBadges, 'Community Badges documents') : '') + '</li></ul></div>' +
+      '<div class="card"><h3>AGFT</h3><p style="margin:0">Attempt it as many times as you like. Only your best score counts, once for the whole season.' + (L.agftChart ? ' ' + link(L.agftChart, 'AGFT scoring table') : '') + '</p></div>' +
+      '<div class="card"><h3>Meet-up</h3><p style="margin:0">If you attempt an in-person meet-up and you’re the only one to show up, it still counts if you post a meet-up report. If you’re the only active member within about 200 miles and get no replies, a virtual meet-up is accepted. Honor code applies.</p></div>' +
+      '<div class="card"><h3>Personal goal</h3><ul class="rules-list">' +
+      '<li>Make it a SMARTER goal: Specific, Measurable, Actionable, Risky, Time-keyed, Exciting &amp; Relevant.</li>' +
+      '<li>It must be outside the other components of the StrenGames, with no double-dipping.</li>' +
+      '<li>Aim for about the effort of one of the easier badges. Make it hard but not impossible, and never an easy “check-the-block”.</li>' +
+      '<li>Post it in the ' + link(L.personalGoalsThread, 'Personal Goals thread') + ' by the end of week 1, and post evidence there by the last day.</li></ul></div>' +
+      '<div class="card"><h3>Teams</h3><ul class="rules-list">' +
+      '<li>Team score = the members’ total scores divided by the number of members (mean average).</li>' +
+      '<li>Teams need at least ' + season.minOfficialTeamSize + ' members to be ranked as official.</li>' +
+      '<li>At the halfway point, a team leader can ask that a member who hasn’t participated at all be removed. Someone inconsistent doesn’t count: rally around him instead.</li>' +
+      '<li>Make sure you commit. Your teammates are counting on you!</li></ul></div>' +
+      ((L.faq || L.group || season.organizerContact) ? '<div class="card"><h3>Questions</h3><p style="margin:0">' + [L.faq ? link(L.faq, 'StrenGames FAQ') : '', L.group ? link(L.group, 'StrenGames group') : '', esc(season.organizerContact)].filter(String).join(' · ') + '</p></div>' : '') +
+      quoteHtml(8);
+    $('#view-rules').innerHTML = html;
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
