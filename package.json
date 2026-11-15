@@ -1,0 +1,13 @@
+{
+  "name": "strengames-hub",
+  "private": true,
+  "description": "StrenGames Hub: Google Apps Script web app for the six-week Strenuous Life competition",
+  "scripts": {
+    "test": "node --test test/logic.test.js test/server.test.js test/scoring-regression.test.js",
+    "test:e2e": "node --test test/e2e.test.js",
+    "demo": "node test/build-preview.js"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

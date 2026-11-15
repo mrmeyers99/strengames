@@ -61,6 +61,6 @@ const seed = `
 let html = R('Index.html')
   .replace("<?!= include('Styles'); ?>", R('Styles.html'))
   .replace("<?!= include('Client'); ?>", seed + '\n' + R('Client.html'))
-  .replace("<?!= JSON.stringify(heroSrc_()) ?>", JSON.stringify(fs.existsSync(path.join(__dirname, '..', 'HeroImage.html')) ? R('HeroImage.html').trim() : ''));
+  .replace("<?!= JSON.stringify(heroSrc_()) ?>", JSON.stringify(has('HeroImage.html') ? R('HeroImage.html').trim() : ''));
 fs.writeFileSync(outFile, html);
 console.log('wrote preview.html', html.length);

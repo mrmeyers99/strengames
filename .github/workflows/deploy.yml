@@ -23,7 +23,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test test/logic.test.js test/server.test.js
+      - name: Unit, server and scoring tests
+        run: npm test
+      - name: Install Playwright + Chromium
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Browser tests
+        run: npm run test:e2e
 
   deploy:
     needs: test

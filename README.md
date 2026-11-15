@@ -84,7 +84,28 @@ Re-scoring StrenGames VII's 791 responses with this code gives exactly the same 
 
 ## Development
 ```bash
-node --test test/logic.test.js test/server.test.js   # unit + end-to-end tests on an Apps Script mock
-node test/build-preview.js "2025-11-10 19:30:00"   # writes test/preview.html with made-up demo data
+npm test            # logic, server (Apps Script mock) and hand-checked scoring regression tests
 ```
-`tools/cut_moose.py` re-cuts the animation from the original banner GIF (`python3 tools/cut_moose.py tsl-banner-desktop.gif out.webp 220 2 45`). `tools/parse_handbook.py` regenerates the badge list from `pdftotext -layout` output of the Handbook.
+```bash
+npm install
+```
+```bash
+npx playwright install chromium
+```
+```bash
+npm run test:e2e    # browser tests: drive the real page in headless Chromium
+```
+```bash
+npm run demo -- "2025-11-10 19:30:00"   # writes test/preview.html with made-up data at that moment
+```
+
+| Test file | What it covers |
+|---|---|
+| `test/logic.test.js` | Deadlines (time zones, daylight saving), overrides, validation, scoring rules |
+| `test/server.test.js` | `Code.gs` end to end on an in-memory Apps Script mock: sign-up, teams, leave, rename, check-ins, import |
+| `test/scoring-regression.test.js` | A made-up season whose totals, ranks and team scores were worked out by hand |
+| `test/e2e.test.js` | The real page in Chromium: enlist, file and edit a report, badge search, closed weeks, TR's bubble, rename, leave, standings, no sideways scroll on a phone |
+
+All of these run in the **Deploy Apps Script** workflow, and nothing deploys unless they pass.
+
+`tools/parse_handbook.py` regenerates the badge list from `pdftotext -layout` output of the Handbook. `tools/cut_moose.py` re-cuts the animation from the original banner GIF.
