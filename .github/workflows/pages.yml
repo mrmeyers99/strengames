@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
       - name: Build demo page
         run: node test/build-preview.js "2025-11-10 19:30:00" docs/demo.html
       - uses: actions/upload-pages-artifact@v3
