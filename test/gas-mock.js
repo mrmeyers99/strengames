@@ -105,6 +105,101 @@
   };
   SS.prototype.toast = function () {};
 
+  // ---- SHA-256 / HMAC in plain JS (the demo page runs this mock in the browser, without Node's crypto)
+  function bytesOf(v) {
+    if (typeof v !== 'string')
+      return Array.prototype.map.call(v, function (b) {
+        return b & 255;
+      });
+    var s = unescape(encodeURIComponent(v)),
+      out = [];
+    for (var i = 0; i < s.length; i++) out.push(s.charCodeAt(i));
+    return out;
+  }
+  function signed(bytes) {
+    return bytes.map(function (b) {
+      return b > 127 ? b - 256 : b;
+    });
+  }
+  var K = [];
+  (function () {
+    var found = 0;
+    for (var c = 2; found < 64; c++) {
+      var prime = true;
+      for (var d = 2; d * d <= c; d++)
+        if (c % d === 0) {
+          prime = false;
+          break;
+        }
+      if (prime) K[found++] = ((Math.pow(c, 1 / 3) % 1) * 4294967296) | 0;
+    }
+  })();
+  function sha256(msg) {
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var bytes = msg.slice(),
+      bitLen = msg.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (var s = 56; s >= 0; s -= 8)
+      bytes.push(s >= 32 ? Math.floor(bitLen / Math.pow(2, s)) & 255 : (bitLen >>> s) & 255);
+    function rotr(x, k) {
+      return (x >>> k) | (x << (32 - k));
+    }
+    var W = new Array(64);
+    for (var off = 0; off < bytes.length; off += 64) {
+      for (var i = 0; i < 16; i++)
+        W[i] =
+          (bytes[off + 4 * i] << 24) |
+          (bytes[off + 4 * i + 1] << 16) |
+          (bytes[off + 4 * i + 2] << 8) |
+          bytes[off + 4 * i + 3];
+      for (i = 16; i < 64; i++) {
+        var s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3);
+        var s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10);
+        W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
+      }
+      var a = H[0],
+        b = H[1],
+        c = H[2],
+        d = H[3],
+        e = H[4],
+        f = H[5],
+        g = H[6],
+        h = H[7];
+      for (i = 0; i < 64; i++) {
+        var t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + W[i]) | 0;
+        var t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g;
+        g = f;
+        f = e;
+        e = (d + t1) | 0;
+        d = c;
+        c = b;
+        b = a;
+        a = (t1 + t2) | 0;
+      }
+      H = [a, b, c, d, e, f, g, h].map(function (v, k) {
+        return (H[k] + v) | 0;
+      });
+    }
+    var out = [];
+    H.forEach(function (v) {
+      out.push((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
+    });
+    return out;
+  }
+  function hmac(key, msg) {
+    if (key.length > 64) key = sha256(key);
+    while (key.length < 64) key = key.concat([0]);
+    var ipad = key.map(function (b) {
+        return b ^ 0x36;
+      }),
+      opad = key.map(function (b) {
+        return b ^ 0x5c;
+      });
+    return sha256(opad.concat(sha256(ipad.concat(msg))));
+  }
+
   function install(g, Logic, opts) {
     opts = opts || {};
     var ss = new SS();
@@ -143,8 +238,31 @@
         };
       }
     };
+    var props = {};
+    g.PropertiesService = {
+      getScriptProperties: function () {
+        return {
+          getProperty: function (k) {
+            return Object.prototype.hasOwnProperty.call(props, k) ? props[k] : null;
+          },
+          setProperty: function (k, v) {
+            props[k] = String(v);
+            return this;
+          }
+        };
+      }
+    };
     var n = 0;
     g.Utilities = {
+      DigestAlgorithm: { SHA_256: 'SHA_256' },
+      Charset: { UTF_8: 'UTF_8' },
+      // Like Apps Script: strings are UTF-8 encoded, results are arrays of signed bytes.
+      computeDigest: function (alg, value) {
+        return signed(sha256(bytesOf(value)));
+      },
+      computeHmacSha256Signature: function (value, key) {
+        return signed(hmac(bytesOf(key), bytesOf(value)));
+      },
       getUuid: function () {
         n++;
         return ('00000000' + n.toString(16)).slice(-8) + '-aaaa-bbbb-cccc-dddddddddddd';
