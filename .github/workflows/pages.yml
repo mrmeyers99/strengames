@@ -26,7 +26,7 @@ jobs:
           node-version: 26
       - name: Build demo page
         run: node test/build-preview.js "2025-11-10 19:30:00" docs/demo.html
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs
   deploy:
