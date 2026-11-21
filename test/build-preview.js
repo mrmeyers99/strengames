@@ -21,7 +21,7 @@ const seed = `
 <script>
 (function () {
   var env = GasMock.install(window, Logic, { now: Logic.zonedToEpoch('2025-10-01 12:00:00', 'America/New_York') });
-  setup();
+  setup_();
   var cfg = env.ss.getSheetByName('Config');
   function set(k, v) { var i = cfg.d.findIndex(function (r) { return r[0] === k; }); cfg.set(i + 1, 2, v); }
   set('season_name', 'StrenGames VIII'); set('season_start', '2025-10-18');
@@ -30,7 +30,7 @@ const seed = `
   set('bonus_challenge_name', 'Tim Werth Bonus Challenge'); set('bonus_challenge_description', 'Complete a 20-mile ruck over the six weeks.');
   set('bonus_reveal_at', '2025-10-18 00:00:00');
   set('link_agft_chart', 'https://example.com/agft'); set('link_personal_goals_thread', 'https://example.com/goals');
-  fillWeeks();
+  fillWeeks_();
   var first = ['Arthur','Silas','Gideon','Wyatt','Elias','Hollis','Jasper','Amos','Calvin','Rufus','Otis','Walter','Ezra','Felix','Harlan','Ira','Leland','Milo','Nolan','Porter','Quincy','Reuben','Sterling','Thaddeus','Virgil','Warren','Abel','Booker','Clement','Dorian'];
   var last = ['Hale','Brandt','Crowley','Dunmore','Ellery','Finch','Garrow','Hatch','Ingram','Jessup','Keane','Lockhart','Mercer','Nash','Orwell','Pike','Quill','Rook','Stroud','Tolliver','Upton','Vance','Wilder','Yates','Ashby','Bristow','Carver','Drury','Eames','Fenwick'];
   var teams = ['Bull Moose Brigade', 'Rough Riders of the Rockies', 'Northwoods Lumberjacks', 'Gulf Coast Grit', 'The Arena Men', 'Solo Sentinels'];

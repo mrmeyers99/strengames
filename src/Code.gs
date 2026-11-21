@@ -3,7 +3,10 @@
  *
  * StrenGames Hub — Apps Script server.
  * Bind this project to the "StrenGames Hub" spreadsheet (Extensions → Apps Script),
- * run setup() once, then Deploy → New deployment → Web app.
+ * reload the sheet, pick StrenGames → Set up / repair tabs, then Deploy → New deployment → Web app.
+ *
+ * Every function without a trailing underscore can be called from the public web page (as the owner),
+ * so organizer tools are wrapped in menuOnly_() and do their work in private _ functions.
  */
 
 var SCHEMA = {
@@ -112,9 +115,42 @@ function onOpen() {
     .addToUi();
 }
 
+// ---------------------------------------------------------------- organizer tools (spreadsheet menu only)
+
+/** Organizer tools run only from the StrenGames menu in the sheet, never from the public web page. */
+function menuOnly_() {
+  var inSheet = true;
+  try {
+    SpreadsheetApp.getUi(); // throws when called from the web app (or the script editor)
+  } catch (e) {
+    inSheet = false;
+  }
+  if (!inSheet) throw new Error('Run this from the StrenGames menu in the spreadsheet.');
+}
+function setup() {
+  menuOnly_();
+  setup_();
+}
+function fillWeeks() {
+  menuOnly_();
+  fillWeeks_();
+}
+function clearStandingsCache() {
+  menuOnly_();
+  clearStandingsCache_();
+}
+function importRosterPrompt() {
+  menuOnly_();
+  importRosterPrompt_();
+}
+function importRoster() {
+  menuOnly_();
+  return importRoster_();
+}
+
 // ---------------------------------------------------------------- setup
 
-function setup() {
+function setup_() {
   var ss = SpreadsheetApp.getActive();
   Object.keys(SCHEMA).forEach(function (name) {
     var sh = ss.getSheetByName(name) || ss.insertSheet(name);
@@ -160,11 +196,11 @@ function setup() {
   if (s1 && s1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(s1);
   var tz = Logic.str(readConfig_().timezone);
   if (tz) ss.setSpreadsheetTimeZone(tz);
-  clearStandingsCache();
+  clearStandingsCache_();
 }
 
 /** Pre-fill the Weeks tab from season_start (only if it's empty). */
-function fillWeeks() {
+function fillWeeks_() {
   var cfg = readConfig_();
   var sh = sheet_('Weeks');
   if (sh.getLastRow() > 1) {
@@ -262,7 +298,7 @@ function signup(payload) {
       pin_hash: pinHash
     });
     var joined = addMemberships_({ id: id, name: name }, teamNames, []);
-    clearStandingsCache();
+    clearStandingsCache_();
     var session = session_({ id: id, name: name, tsl_username: username, pin_hash: pinHash });
     return { participant: session.participant, token: session.token, joined: joined, bootstrap: getBootstrap() };
   });
@@ -293,7 +329,7 @@ function joinTeams(payload) {
       );
     }
     var joined = addMemberships_({ id: p.id, name: p.name }, teamNames, mine);
-    clearStandingsCache();
+    clearStandingsCache_();
     return { joined: joined, record: recordFor_(p.id), bootstrap: getBootstrap() };
   });
 }
@@ -338,7 +374,7 @@ function leaveTeam(payload) {
       writeRow_(teams, team._row, { leader_id: next ? next.id : '', leader_name: next ? next.name : '' });
       newLeader = next ? next.name : '';
     }
-    clearStandingsCache();
+    clearStandingsCache_();
     return { left: row.team, newLeader: newLeader, record: recordFor_(p.id), bootstrap: getBootstrap() };
   });
 }
@@ -368,7 +404,7 @@ function renameParticipant(payload) {
         }
       });
     });
-    clearStandingsCache();
+    clearStandingsCache_();
     return { record: recordFor_(p.id), bootstrap: getBootstrap() };
   });
 }
@@ -479,7 +515,7 @@ function submitCheckin(payload) {
     };
     if (rowNum > 0) writeRow_(t, rowNum, obj);
     else appendRow_('Checkins', obj);
-    clearStandingsCache();
+    clearStandingsCache_();
     return { late: gate.late, record: recordFor_(p.id) };
   });
 }
@@ -515,7 +551,7 @@ function getStandings() {
   return lb;
 }
 
-function clearStandingsCache() {
+function clearStandingsCache_() {
   CacheService.getScriptCache().remove(CACHE_KEY);
 }
 
@@ -692,7 +728,7 @@ function sameText_(a, b) {
 
 // ---------------------------------------------------------------- import (optional)
 
-function importRosterPrompt() {
+function importRosterPrompt_() {
   var ui = SpreadsheetApp.getUi();
   var sh = SpreadsheetApp.getActive().getSheetByName('Import');
   if (!sh || sh.getLastRow() < 2) {
@@ -705,7 +741,7 @@ function importRosterPrompt() {
     );
     return;
   }
-  var n = importRoster();
+  var n = importRoster_();
   ui.alert(
     'Imported ' +
       n.people +
@@ -721,7 +757,7 @@ function importRosterPrompt() {
  * Copies people + teams from rows pasted into the "Import" tab (a legacy Google Forms enrollment export).
  * Idempotent by username. Reads only this spreadsheet, so the script never needs access to your other files.
  */
-function importRoster() {
+function importRoster_() {
   var src = sheet_('Import').getDataRange().getValues();
   var hdr = src.shift().map(function (h) {
     return String(h).toLowerCase();
@@ -775,7 +811,7 @@ function importRoster() {
         memberships.push({ participant_id: p.id, team: t, active: true });
       });
     });
-    clearStandingsCache();
+    clearStandingsCache_();
     return counts;
   });
 }

@@ -21,7 +21,7 @@ function boot() {
   const env = ctx.GasMock.install(ctx, ctx.Logic, {
     now: ctx.Logic.zonedToEpoch('2025-10-01 12:00:00', 'America/New_York')
   });
-  ctx.setup();
+  ctx.setup_();
   const cfg = env.ss.getSheetByName('Config');
   const set = (k, v) => {
     const rows = cfg.d;
@@ -34,7 +34,7 @@ function boot() {
   set('registration_closes', '2025-10-16 23:59:59');
   set('bonus_challenge_name', 'Tim Werth Bonus Challenge');
   set('bonus_reveal_at', '2025-10-18 00:00:00');
-  ctx.fillWeeks();
+  ctx.fillWeeks_();
   return { ctx, env, set, at: s => ctx.Logic.zonedToEpoch(s, 'America/New_York') };
 }
 
@@ -138,7 +138,7 @@ test('full season flow', () => {
   assert.strictEqual(late.late, true);
   assert.strictEqual(late.record.score.total, 0, 'late row replaces the on-time one and does not count');
   set('late_submissions_count', 'TRUE');
-  ctx.clearStandingsCache();
+  ctx.clearStandingsCache_();
 
   const st = ctx.getStandings();
   assert.strictEqual(st.individuals[0].name, 'Wyatt Holloway');
@@ -176,9 +176,9 @@ test('roster import reads the local Import tab', () => {
     ['10/1/2025', 'Silas Crane', '@bull-moose', 'Bull Moose Brigade'],
     ['10/2/2025', 'Wyatt Holloway', 'Ridge Runner', 'Bull Moose Brigade']
   ].forEach(r => imp.appendRow(r));
-  const n = ctx.importRoster();
+  const n = ctx.importRoster_();
   assert.deepStrictEqual({ ...n }, { people: 2, teams: 2, memberships: 3 });
-  assert.deepStrictEqual({ ...ctx.importRoster() }, { people: 0, teams: 0, memberships: 0 }, 'idempotent');
+  assert.deepStrictEqual({ ...ctx.importRoster_() }, { people: 0, teams: 0, memberships: 0 }, 'idempotent');
 });
 
 test('participant can fix their name everywhere', () => {
@@ -295,4 +295,10 @@ test('login: PIN, lockout, organizer reset, and no acting as someone else', () =
   // sessions expire
   env.clock.now = at('2026-06-01 00:00:00');
   assert.throws(() => ctx.getMyRecord(fresh.token), /expired/);
+});
+
+test('organizer tools refuse to run from the web page', () => {
+  const { ctx } = boot(); // the mock has no spreadsheet UI, like a web-app request
+  for (const fn of ['setup', 'fillWeeks', 'clearStandingsCache', 'importRosterPrompt', 'importRoster'])
+    assert.throws(() => ctx[fn](), /StrenGames menu in the spreadsheet/, fn);
 });

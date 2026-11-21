@@ -62,7 +62,7 @@ You can trigger either workflow by hand from the **Actions** tab ("Run workflow"
 
 1. Create a new Google Sheet named, for example, **StrenGames Hub**.
 2. **Extensions → Apps Script.** (Or just set `scriptId` in `.clasp.json` and let the deploy workflow push the code.) Create one file per file in `src/`, with the same names. Apps Script adds `.gs` and `.html` itself, so make `Code` and `Logic` as Script files and `Index`, `Styles`, `Client` and `HeroImage` as HTML files. `HeroImage` is one very long line; paste it whole. Paste in the contents. Replace `appsscript.json` too: Project Settings → "Show appsscript.json".
-3. Pick **setup** in the function dropdown, then press **Run** and authorize. This creates the tabs and default settings. Reload the sheet; a **StrenGames** menu appears.
+3. Reload the sheet. A **StrenGames** menu appears. Pick **StrenGames → Set up / repair tabs** and authorize. This creates the tabs and default settings. (Organizer tools only run from this menu. Running them from the script editor's Run button, or from the web app, is refused on purpose.)
 4. In the **Config** tab, set at least these. All times are in `timezone`.
    - `season_name`, `season_start` (the first Saturday, `yyyy-MM-dd`)
    - `registration_opens`, `registration_closes` (`yyyy-MM-dd HH:mm:ss`)
