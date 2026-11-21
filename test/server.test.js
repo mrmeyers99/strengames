@@ -1,19 +1,39 @@
 // End-to-end test of Code.gs against the in-memory Apps Script mock.
 const test = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs'), vm = require('vm'), path = require('path');
+const fs = require('fs'),
+  vm = require('vm'),
+  path = require('path');
 const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
 
 function boot() {
   const ctx = vm.createContext({ console, Intl });
-  vm.runInContext(read('src/Logic.gs') + '\n' + '' + '\n' + read('src/Code.gs') + '\n' + fs.readFileSync(path.join(__dirname, 'gas-mock.js'), 'utf8'), ctx);
-  const env = ctx.GasMock.install(ctx, ctx.Logic, { now: ctx.Logic.zonedToEpoch('2025-10-01 12:00:00', 'America/New_York') });
+  vm.runInContext(
+    read('src/Logic.gs') +
+      '\n' +
+      '' +
+      '\n' +
+      read('src/Code.gs') +
+      '\n' +
+      fs.readFileSync(path.join(__dirname, 'gas-mock.js'), 'utf8'),
+    ctx
+  );
+  const env = ctx.GasMock.install(ctx, ctx.Logic, {
+    now: ctx.Logic.zonedToEpoch('2025-10-01 12:00:00', 'America/New_York')
+  });
   ctx.setup();
   const cfg = env.ss.getSheetByName('Config');
-  const set = (k, v) => { const rows = cfg.d; const i = rows.findIndex(r => r[0] === k); cfg.set(i + 1, 2, v); };
-  set('season_name', 'StrenGames VIII'); set('season_start', '2025-10-18');
-  set('registration_opens', '2025-09-25 00:00:00'); set('registration_closes', '2025-10-16 23:59:59');
-  set('bonus_challenge_name', 'Tim Werth Bonus Challenge'); set('bonus_reveal_at', '2025-10-18 00:00:00');
+  const set = (k, v) => {
+    const rows = cfg.d;
+    const i = rows.findIndex(r => r[0] === k);
+    cfg.set(i + 1, 2, v);
+  };
+  set('season_name', 'StrenGames VIII');
+  set('season_start', '2025-10-18');
+  set('registration_opens', '2025-09-25 00:00:00');
+  set('registration_closes', '2025-10-16 23:59:59');
+  set('bonus_challenge_name', 'Tim Werth Bonus Challenge');
+  set('bonus_reveal_at', '2025-10-18 00:00:00');
   ctx.fillWeeks();
   return { ctx, env, set, at: s => ctx.Logic.zonedToEpoch(s, 'America/New_York') };
 }
@@ -30,7 +50,12 @@ test('full season flow', () => {
   assert.strictEqual(b.season.bonus.revealed, false);
   assert.strictEqual(b.season.bonus.name, 'Bonus Challenge', 'real name hidden before reveal');
 
-  const r1 = ctx.signup({ name: '  Wyatt   Holloway ', username: '@Ridge-Runner', teams: [], newTeam: 'Bull Moose Brigade' });
+  const r1 = ctx.signup({
+    name: '  Wyatt   Holloway ',
+    username: '@Ridge-Runner',
+    teams: [],
+    newTeam: 'Bull Moose Brigade'
+  });
   assert.strictEqual(r1.participant.name, 'Wyatt Holloway');
   assert.strictEqual(r1.participant.username, 'ridge-runner');
   assert.deepStrictEqual(Array.from(r1.joined), ['Bull Moose Brigade']);
@@ -39,7 +64,8 @@ test('full season flow', () => {
 
   const r2 = ctx.signup({ name: 'Silas Crane', username: 'bull-moose', teams: ['bull moose BRIGADE'] });
   assert.deepStrictEqual(Array.from(r2.joined), ['Bull Moose Brigade'], 'case-insensitive match to existing team');
-  const sam = r2.participant.id, trevor = r1.participant.id;
+  const sam = r2.participant.id,
+    trevor = r1.participant.id;
   const j = ctx.joinTeams({ participantId: sam, teams: ['Bull Moose Brigade'], newTeam: 'Pacific Pathfinders' });
   assert.deepStrictEqual(Array.from(j.joined), ['Pacific Pathfinders']);
 
@@ -55,12 +81,34 @@ test('full season flow', () => {
   assert.throws(() => ctx.submitCheckin({ participantId: sam, week: 1, pa_days: 3 }), /isn.t open yet/);
   env.clock.now = at('2025-10-25 09:00:00');
   assert.strictEqual(ctx.getBootstrap().season.bonus.name, 'Tim Werth Bonus Challenge');
-  let res = ctx.submitCheckin({ participantId: trevor, week: 1, pa_days: 7, deed_days: 7, agon: true, badge_done: true,
-    badge_requirement: 'Knotsmanship — Req 1', badge_requirement_id: 'knotsmanship-1', agft: '393', meetup: false, personal_goal: false, bonus: false });
+  let res = ctx.submitCheckin({
+    participantId: trevor,
+    week: 1,
+    pa_days: 7,
+    deed_days: 7,
+    agon: true,
+    badge_done: true,
+    badge_requirement: 'Knotsmanship — Req 1',
+    badge_requirement_id: 'knotsmanship-1',
+    agft: '393',
+    meetup: false,
+    personal_goal: false,
+    bonus: false
+  });
   assert.strictEqual(res.record.score.total, 70 + 70 + 80 + 80 + 393);
   // edit (upsert) — still one row
-  res = ctx.submitCheckin({ participantId: trevor, week: 1, pa_days: 6, deed_days: 7, agon: true, badge_done: true,
-    badge_requirement: 'Knotsmanship — Req 1', badge_requirement_id: 'knotsmanship-1', agft: '393', meetup: true });
+  res = ctx.submitCheckin({
+    participantId: trevor,
+    week: 1,
+    pa_days: 6,
+    deed_days: 7,
+    agon: true,
+    badge_done: true,
+    badge_requirement: 'Knotsmanship — Req 1',
+    badge_requirement_id: 'knotsmanship-1',
+    agft: '393',
+    meetup: true
+  });
   assert.strictEqual(env.ss.getSheetByName('Checkins').getLastRow(), 2);
   assert.strictEqual(res.record.score.total, 60 + 70 + 80 + 80 + 393 + 200);
   assert.strictEqual(res.record.weeks[0].submitted, true);
@@ -75,7 +123,17 @@ test('full season flow', () => {
   // late mode
   set('allow_late_submissions', 'TRUE');
   env.clock.now = at('2025-11-03 10:00:00');
-  const late = ctx.submitCheckin({ participantId: r1.participant.id, week: 1, pa_days: 7, deed_days: 7, agon: true, badge_done: true, badge_requirement: 'x', agft: 393, meetup: true });
+  const late = ctx.submitCheckin({
+    participantId: r1.participant.id,
+    week: 1,
+    pa_days: 7,
+    deed_days: 7,
+    agon: true,
+    badge_done: true,
+    badge_requirement: 'x',
+    agft: 393,
+    meetup: true
+  });
   assert.strictEqual(late.late, true);
   assert.strictEqual(late.record.score.total, 0, 'late row replaces the on-time one and does not count');
   set('late_submissions_count', 'TRUE');
@@ -108,10 +166,12 @@ test('single-team mode and removed members', () => {
 test('roster import reads the local Import tab', () => {
   const { ctx, env } = boot();
   const imp = env.ss.insertSheet('Import');
-  [['Timestamp', 'Your Name', 'Your TSL Username', 'Team(s) you want to join'],
-   ['10/1/2025', 'Wyatt Holloway', 'Ridge Runner', 'Bull Moose Brigade, Rocky Mountain Rangers'],
-   ['10/1/2025', 'Silas Crane', '@bull-moose', 'Bull Moose Brigade'],
-   ['10/2/2025', 'Wyatt Holloway', 'Ridge Runner', 'Bull Moose Brigade']].forEach(r => imp.appendRow(r));
+  [
+    ['Timestamp', 'Your Name', 'Your TSL Username', 'Team(s) you want to join'],
+    ['10/1/2025', 'Wyatt Holloway', 'Ridge Runner', 'Bull Moose Brigade, Rocky Mountain Rangers'],
+    ['10/1/2025', 'Silas Crane', '@bull-moose', 'Bull Moose Brigade'],
+    ['10/2/2025', 'Wyatt Holloway', 'Ridge Runner', 'Bull Moose Brigade']
+  ].forEach(r => imp.appendRow(r));
   const n = ctx.importRoster();
   assert.deepStrictEqual({ ...n }, { people: 2, teams: 2, memberships: 3 });
   assert.deepStrictEqual({ ...ctx.importRoster() }, { people: 0, teams: 0, memberships: 0 }, 'idempotent');
@@ -124,7 +184,12 @@ test('participant can fix their name everywhere', () => {
   ctx.submitCheckin({ participantId: r.participant.id, week: 1, pa_days: 3 });
   const res = ctx.renameParticipant({ participantId: r.participant.id, name: '  Jebediah   Smith ' });
   assert.strictEqual(res.record.participant.name, 'Jebediah Smith');
-  for (const [tab, col] of [['Participants', 2], ['Memberships', 2], ['Checkins', 2], ['Teams', 3]]) {
+  for (const [tab, col] of [
+    ['Participants', 2],
+    ['Memberships', 2],
+    ['Checkins', 2],
+    ['Teams', 3]
+  ]) {
     assert.strictEqual(env.ss.getSheetByName(tab).d[1][col - 1], 'Jebediah Smith', tab);
   }
   assert.strictEqual(ctx.getStandings().individuals[0].name, 'Jebediah Smith');
@@ -132,7 +197,7 @@ test('participant can fix their name everywhere', () => {
 });
 
 test('leaving a team: rejoin, leader hand-off, window', () => {
-  const { ctx, env, set, at } = boot();
+  const { ctx, env, at } = boot();
   const a = ctx.signup({ name: 'Ann Lead', username: 'ann', newTeam: 'Moose' }).participant.id;
   const b = ctx.signup({ name: 'Bob Second', username: 'bob', teams: ['Moose'] }).participant.id;
   const c = ctx.signup({ name: 'Cy Third', username: 'cy', teams: ['Moose'] }).participant.id;

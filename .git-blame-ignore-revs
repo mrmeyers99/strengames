@@ -1,0 +1,2 @@
+# Bulk Prettier reformat. GitHub skips these in blame; locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+35974e122ad7f8475a24b998f9fc5e4c057916de

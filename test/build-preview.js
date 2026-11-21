@@ -1,11 +1,19 @@
 // Builds preview.html: the real Index/Styles/Client + Code.gs running on the in-memory mock with fake demo data.
-const fs = require('fs'), path = require('path');
+const fs = require('fs'),
+  path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const has = f => fs.existsSync(path.join(__dirname, '..', 'src', f));
 const nowLocal = process.argv[2] || '2025-11-10 19:30:00';
 const outFile = process.argv[3] || path.join(__dirname, 'preview.html');
 // Made-up badge entries for the demo's filed reports.
-const DEMO_BADGES = ['Knot Craft, Req 1', 'Knot Craft, Req 2', 'Campfire, Req 1', 'Rucking, Req 1', 'Correspondence, Req 1', 'Camp Cook, Req 1'];
+const DEMO_BADGES = [
+  'Knot Craft, Req 1',
+  'Knot Craft, Req 2',
+  'Campfire, Req 1',
+  'Rucking, Req 1',
+  'Correspondence, Req 1',
+  'Camp Cook, Req 1'
+];
 const seed = `
 <script>${fs.readFileSync(path.join(__dirname, 'gas-mock.js'), 'utf8')}</script>
 <script>${R('Logic.gs')}</script>
@@ -53,6 +61,9 @@ const seed = `
 let html = R('Index.html')
   .replace("<?!= include('Styles'); ?>", R('Styles.html'))
   .replace("<?!= include('Client'); ?>", seed + '\n' + R('Client.html'))
-  .replace("<?!= JSON.stringify(heroSrc_()) ?>", JSON.stringify(has('HeroImage.html') ? R('HeroImage.html').trim() : ''));
+  .replace(
+    '<?!= JSON.stringify(heroSrc_()) ?>',
+    JSON.stringify(has('HeroImage.html') ? R('HeroImage.html').trim() : '')
+  );
 fs.writeFileSync(outFile, html);
 console.log('wrote preview.html', html.length);
