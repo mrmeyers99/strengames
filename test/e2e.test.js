@@ -2,14 +2,16 @@
 // with made-up demo data) in headless Chromium. Run: node --test test/e2e.test.js
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const fs = require('fs'), os = require('os'), path = require('path');
+const fs = require('fs'),
+  os = require('os'),
+  path = require('path');
 const { execFileSync } = require('child_process');
 const { chromium, devices } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'strengames-e2e-'));
-const MID_SEASON = path.join(TMP, 'mid-season.html');   // week 4 open, registration + team changes closed
-const REG_OPEN = path.join(TMP, 'registration.html');   // registration and team changes open
+const MID_SEASON = path.join(TMP, 'mid-season.html'); // week 4 open, registration + team changes closed
+const REG_OPEN = path.join(TMP, 'registration.html'); // registration and team changes open
 const QUIPS = (() => {
   const src = fs.readFileSync(path.join(ROOT, 'src', 'Client.html'), 'utf8');
   const block = src.slice(src.indexOf('var QUIPS = ['), src.indexOf('];', src.indexOf('var QUIPS = [')));
@@ -22,11 +24,15 @@ before(async () => {
   execFileSync('node', [path.join(__dirname, 'build-preview.js'), '2025-10-10 12:00:00', REG_OPEN]);
   browser = await chromium.launch();
 });
-after(async () => { if (browser) await browser.close(); });
+after(async () => {
+  if (browser) await browser.close();
+});
 
 /** Opens a preview; `asMe` remembers the demo's first participant (Arthur Hale) like a returning visitor. */
 async function open(file, { asMe = false, view, device } = {}) {
-  const context = await browser.newContext(device ? { ...devices[device] } : { viewport: { width: 1100, height: 900 } });
+  const context = await browser.newContext(
+    device ? { ...devices[device] } : { viewport: { width: 1100, height: 900 } }
+  );
   const page = await context.newPage();
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
@@ -173,7 +179,7 @@ test('team changes are closed mid-season', async () => {
 test('standings: individuals, teams (expandable) and AGFT', async () => {
   const page = await open(MID_SEASON, { asMe: true, view: 'standings' });
   await page.waitForSelector('table.board tbody tr');
-  assert.ok(await page.locator('table.board tbody tr').count() >= 20, 'everyone listed');
+  assert.ok((await page.locator('table.board tbody tr').count()) >= 20, 'everyone listed');
   assert.strictEqual(await page.locator('tr.me').count(), 1, 'my row highlighted');
   await page.click('.seg button[data-tab=teams]');
   await page.click('tr.expandable >> nth=0');

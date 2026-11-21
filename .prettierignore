@@ -1,0 +1,6 @@
+node_modules/
+package-lock.json
+docs/demo.html
+test/preview.html
+# One-line WebP data URI
+src/HeroImage.html

@@ -1,12 +1,18 @@
 // Builds preview.html: the real Index/Styles/Client + Code.gs running on the in-memory mock with fake demo data.
-const fs = require('fs'), path = require('path');
+const fs = require('fs'),
+  path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const has = f => fs.existsSync(path.join(__dirname, '..', 'src', f));
 const nowLocal = process.argv[2] || '2025-11-10 19:30:00';
 const outFile = process.argv[3] || path.join(__dirname, 'preview.html');
 // Tiny made-up badge list for the public demo (the real Handbook list is not in this repo).
 const DEMO_BADGES = [
-  ['knots-1', 'Knot Craft', 'Req 1', 'Tie a square knot, bowline, clove hitch and taut-line hitch without a guide: (a) Square knot (b) Bowline (c) Clove hitch (d) Taut-line hitch'],
+  [
+    'knots-1',
+    'Knot Craft',
+    'Req 1',
+    'Tie a square knot, bowline, clove hitch and taut-line hitch without a guide: (a) Square knot (b) Bowline (c) Clove hitch (d) Taut-line hitch'
+  ],
   ['knots-2', 'Knot Craft', 'Req 2', 'Lash two poles together with a square lashing.'],
   ['fire-1', 'Campfire', 'Req 1', 'Build and light a fire with a single match.'],
   ['ruck-1', 'Rucking', 'Req 1', 'Ruck 5 miles carrying 20 lbs.'],
@@ -61,6 +67,9 @@ const seed = `
 let html = R('Index.html')
   .replace("<?!= include('Styles'); ?>", R('Styles.html'))
   .replace("<?!= include('Client'); ?>", seed + '\n' + R('Client.html'))
-  .replace("<?!= JSON.stringify(heroSrc_()) ?>", JSON.stringify(has('HeroImage.html') ? R('HeroImage.html').trim() : ''));
+  .replace(
+    '<?!= JSON.stringify(heroSrc_()) ?>',
+    JSON.stringify(has('HeroImage.html') ? R('HeroImage.html').trim() : '')
+  );
 fs.writeFileSync(outFile, html);
 console.log('wrote preview.html', html.length);
