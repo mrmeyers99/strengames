@@ -132,7 +132,7 @@ test('participant can fix their name everywhere', () => {
 });
 
 test('leaving a team: rejoin, leader hand-off, window', () => {
-  const { ctx, env, set, at } = boot();
+  const { ctx, env, at } = boot();
   const a = ctx.signup({ name: 'Ann Lead', username: 'ann', newTeam: 'Moose' }).participant.id;
   const b = ctx.signup({ name: 'Bob Second', username: 'bob', teams: ['Moose'] }).participant.id;
   const c = ctx.signup({ name: 'Cy Third', username: 'cy', teams: ['Moose'] }).participant.id;

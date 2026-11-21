@@ -18,9 +18,22 @@ A Google Apps Script web app for **StrenGames**, the six-week Strenuous Life tea
 | `test/` | Node tests on an in-memory Apps Script mock, plus the demo builder |
 | `tools/` | `parse_handbook.py` (badge list from the Handbook PDF) and `cut_moose.py` (animation cutout) |
 | `docs/` | GitHub Pages site |
-| `.github/workflows/` | `deploy.yml` (test, then push and deploy to Apps Script) and `pages.yml` (publish `docs/` and the demo) |
+| `.github/workflows/` | `test.yml` and `lint.yml` (run on pull requests), `deploy.yml` (test, then push and deploy to Apps Script) and `pages.yml` (publish `docs/` and the demo) |
 
 > **Badge requirements:** the Handbook's requirement text is copyrighted, so it isn't in this public repo. The live sheet's `BadgeRequirements` tab holds the list. For a new season, copy that tab into the new sheet, or regenerate it with `tools/parse_handbook.py` and paste it in.
+
+## Development
+
+Run `npm install` once. It installs the dev tools and turns on a pre-commit hook that formats the files you commit with Prettier.
+
+| Command | What it does |
+|---|---|
+| `npm test` | Unit, server and scoring tests |
+| `npm run test:e2e` | Browser tests (run `npx playwright install chromium` first) |
+| `npm run lint` | ESLint on `src/*.gs` and `test/*.js` |
+| `npm run format` | Format everything with Prettier (`npm run format:check` only checks) |
+
+Pull requests run the tests, and a lint check that fails if anything is unformatted or has lint errors.
 
 ## How deploys work
 

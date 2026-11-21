@@ -1,0 +1,28 @@
+# Checks formatting (Prettier) and lints (ESLint) on pull requests.
+name: Lint
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Prettier
+        run: npm run format:check
+      - name: ESLint
+        run: npm run lint
