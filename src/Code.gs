@@ -30,7 +30,6 @@ var SCHEMA = {
     'submitted_at',
     'first_submitted_at'
   ],
-  BadgeRequirements: ['id', 'badge', 'requirement', 'text'],
   Overrides: ['tsl_username', 'week', 'new_deadline', 'note']
 };
 
@@ -157,12 +156,6 @@ function setup() {
       if (i > -1) sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).insertCheckboxes();
     });
   });
-  // Seed badge requirements from the Handbook if the tab is empty
-  var br = ss.getSheetByName('BadgeRequirements');
-  if (br.getLastRow() < 2 && typeof BADGE_SEED !== 'undefined' && BADGE_SEED.length) {
-    br.getRange(2, 1, BADGE_SEED.length, 4).setValues(BADGE_SEED);
-    br.getRange('D:D').setWrap(false);
-  }
   var s1 = ss.getSheetByName('Sheet1');
   if (s1 && s1.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(s1);
   var tz = Logic.str(readConfig_().timezone);
@@ -223,18 +216,6 @@ function getBootstrap() {
     .sort(function (a, b) {
       return a.name.localeCompare(b.name);
     });
-  var reqs = readTable_('BadgeRequirements')
-    .filter(function (r) {
-      return r.badge || r.text;
-    })
-    .map(function (r, i) {
-      return {
-        id: String(r.id || 'r' + (i + 1)),
-        badge: r.badge,
-        requirement: String(r.requirement || ''),
-        text: r.text
-      };
-    });
   return {
     now: now,
     season: publicSeason_(season, now),
@@ -242,8 +223,7 @@ function getBootstrap() {
     participants: participants.sort(function (a, b) {
       return a.name.localeCompare(b.name);
     }),
-    teams: teams,
-    badgeRequirements: reqs
+    teams: teams
   };
 }
 
@@ -430,7 +410,7 @@ function getMyRecord(participantId) {
       return Logic.truthy(c.badge_done) && c.badge_requirement;
     })
     .map(function (c) {
-      return { week: Number(c.week), text: c.badge_requirement, id: c.badge_requirement_id };
+      return { week: Number(c.week), text: c.badge_requirement };
     });
   return {
     participant: { id: p.id, name: p.name, username: p.tsl_username },

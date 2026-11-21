@@ -86,7 +86,7 @@ test('enlist: duplicate TSL username is refused', async () => {
   await done(page);
 });
 
-test('weekly report: fill, pick a badge requirement, file, then edit', async () => {
+test('weekly report: fill, describe the badge requirement, file, then edit', async () => {
   const page = await open(MID_SEASON, { asMe: true, view: 'report' });
   await page.waitForSelector('#reportForm');
   assert.match(await page.textContent('#view-report h2'), /Fourth Week Report/, 'opens on the open, unfiled week');
@@ -97,12 +97,8 @@ test('weekly report: fill, pick a badge requirement, file, then edit', async () 
   // filing without saying which requirement is caught
   await page.click('#submitBtn');
   assert.match(await toast(page), /badge requirement/);
-  await page.fill('#badgeInput', 'clove hitch');
-  await page.waitForSelector('#badgeList li[data-i="0"]');
-  assert.match(await page.textContent('#badgeList li[data-i="0"]'), /Knot Craft/);
-  await page.keyboard.press('Enter');
-  assert.match(await page.textContent('#badgePicked'), /Knot Craft/);
-  assert.match(await page.textContent('#badgePicked'), /Every part must be done/);
+  assert.strictEqual(await page.$('#badgeList'), null, 'no requirement list is published');
+  await page.fill('#badgeInput', 'Knot Craft, Req 1');
   assert.strictEqual(await page.textContent('#tallyNum'), '280'); // 50 + 70 + 80 + 80
   await page.click('#submitBtn');
   assert.match(await toast(page), /Report filed/);

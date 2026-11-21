@@ -5,24 +5,18 @@ const R = f => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const has = f => fs.existsSync(path.join(__dirname, '..', 'src', f));
 const nowLocal = process.argv[2] || '2025-11-10 19:30:00';
 const outFile = process.argv[3] || path.join(__dirname, 'preview.html');
-// Tiny made-up badge list for the public demo (the real Handbook list is not in this repo).
+// Made-up badge entries for the demo's filed reports.
 const DEMO_BADGES = [
-  [
-    'knots-1',
-    'Knot Craft',
-    'Req 1',
-    'Tie a square knot, bowline, clove hitch and taut-line hitch without a guide: (a) Square knot (b) Bowline (c) Clove hitch (d) Taut-line hitch'
-  ],
-  ['knots-2', 'Knot Craft', 'Req 2', 'Lash two poles together with a square lashing.'],
-  ['fire-1', 'Campfire', 'Req 1', 'Build and light a fire with a single match.'],
-  ['ruck-1', 'Rucking', 'Req 1', 'Ruck 5 miles carrying 20 lbs.'],
-  ['letters-1', 'Correspondence', 'Req 1', 'Write and mail a handwritten letter to an old friend.'],
-  ['chef-1', 'Camp Cook', 'Req 1', 'Cook a full meal outdoors over coals.']
+  'Knot Craft, Req 1',
+  'Knot Craft, Req 2',
+  'Campfire, Req 1',
+  'Rucking, Req 1',
+  'Correspondence, Req 1',
+  'Camp Cook, Req 1'
 ];
 const seed = `
 <script>${fs.readFileSync(path.join(__dirname, 'gas-mock.js'), 'utf8')}</script>
 <script>${R('Logic.gs')}</script>
-<script>${has('BadgeData.gs') ? R('BadgeData.gs') : 'var BADGE_SEED = ' + JSON.stringify(DEMO_BADGES) + ';'}</script>
 <script>${R('Code.gs')}</script>
 <script>
 (function () {
@@ -47,7 +41,7 @@ const seed = `
     var r = signup({ name: f + ' ' + last[i], username: (f + last[i]).toLowerCase(), teams: t });
     ids.push(r.participant.id);
   });
-  var reqs = BADGE_SEED;
+  var reqs = ${JSON.stringify(DEMO_BADGES)};
   [1, 2, 3, 4].forEach(function (w) {
     env.clock.now = Logic.zonedToEpoch(Logic.addDays('2025-10-18', 7 * (w - 1) + 7) + ' 10:00:00', 'America/New_York');
     ids.forEach(function (id, i) {
@@ -55,7 +49,7 @@ const seed = `
       if (rnd() < 0.15) return;
       var badge = rnd() < 0.6, q = reqs[Math.floor(rnd() * reqs.length)];
       submitCheckin({ participantId: id, week: w, pa_days: Math.floor(rnd() * 8), deed_days: 3 + Math.floor(rnd() * 5), agon: rnd() < 0.75,
-        badge_done: badge, badge_requirement: badge ? q[1] + ' \\u2014 ' + q[2] + ': ' + q[3] : '', badge_requirement_id: badge ? q[0] : '',
+        badge_done: badge, badge_requirement: badge ? q : '',
         agft: rnd() < 0.15 ? Math.floor(150 + rnd() * 300) : '', meetup: rnd() < 0.12, personal_goal: w === 4 && rnd() < 0.3, bonus: w >= 3 && rnd() < 0.2 });
     });
   });

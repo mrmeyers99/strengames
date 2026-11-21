@@ -33,9 +33,9 @@ module.exports = [
     }
   },
   {
-    // Defined in Logic.gs, and in an optional untracked BadgeData.gs.
+    // Defined in Logic.gs.
     files: ['src/Code.gs'],
-    languageOptions: { globals: { Logic: 'readonly', BADGE_SEED: 'readonly' } }
+    languageOptions: { globals: { Logic: 'readonly' } }
   },
   {
     files: ['**/*.js'],

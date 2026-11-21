@@ -16,11 +16,11 @@ A Google Apps Script web app for **StrenGames**, the six-week Strenuous Life tea
 | `src/HeroImage.html`                           | The animated TR-on-moose in the header (WebP data URI; used with permission)                                                                              |
 | `src/appsscript.json`                          | Manifest: limited to the bound spreadsheet (`spreadsheets.currentonly`)                                                                                   |
 | `test/`                                        | Node tests on an in-memory Apps Script mock, plus the demo builder                                                                                        |
-| `tools/`                                       | `parse_handbook.py` (badge list from the Handbook PDF) and `cut_moose.py` (animation cutout)                                                              |
+| `tools/`                                       | `cut_moose.py` (animation cutout)                                                                                                                         |
 | `docs/`                                        | GitHub Pages site                                                                                                                                         |
 | `.github/workflows/`                           | `test.yml` and `lint.yml` (run on pull requests), `deploy.yml` (test, then push and deploy to Apps Script) and `pages.yml` (publish `docs/` and the demo) |
 
-> **Badge requirements:** the Handbook's requirement text is copyrighted, so it isn't in this public repo. The live sheet's `BadgeRequirements` tab holds the list. For a new season, copy that tab into the new sheet, or regenerate it with `tools/parse_handbook.py` and paste it in.
+> **Badge requirements:** the Handbook's requirement text is copyrighted, so the app never lists it. When someone marks a badge requirement done, they must type which badge and requirement they completed in a free-text box. If an older sheet still has a `BadgeRequirements` tab, it is no longer used and can be deleted.
 
 ## Development
 
@@ -62,7 +62,7 @@ You can trigger either workflow by hand from the **Actions** tab ("Run workflow"
 
 1. Create a new Google Sheet named, for example, **StrenGames Hub**.
 2. **Extensions → Apps Script.** (Or just set `scriptId` in `.clasp.json` and let the deploy workflow push the code.) Create one file per file in `src/`, with the same names. Apps Script adds `.gs` and `.html` itself, so make `Code` and `Logic` as Script files and `Index`, `Styles`, `Client` and `HeroImage` as HTML files. `HeroImage` is one very long line; paste it whole. Paste in the contents. Replace `appsscript.json` too: Project Settings → "Show appsscript.json".
-3. Pick **setup** in the function dropdown, then press **Run** and authorize. This creates the tabs and default settings. Copy the badge requirements into the `BadgeRequirements` tab (see the note above). Reload the sheet; a **StrenGames** menu appears.
+3. Pick **setup** in the function dropdown, then press **Run** and authorize. This creates the tabs and default settings. Reload the sheet; a **StrenGames** menu appears.
 4. In the **Config** tab, set at least these. All times are in `timezone`.
    - `season_name`, `season_start` (the first Saturday, `yyyy-MM-dd`)
    - `registration_opens`, `registration_closes` (`yyyy-MM-dd HH:mm:ss`)
@@ -84,7 +84,6 @@ You can trigger either workflow by hand from the **Actions** tab ("Run workflow"
 | Change points                               | `points_*` and `agft_max` in Config. Standings recalculate automatically                                                                                       |
 | Fix someone's report                        | Edit their row in `Checkins` directly                                                                                                                          |
 | Fix a name or merge duplicates              | Edit `Participants`. People pick their name from a list, so typos no longer split scores                                                                       |
-| Add community badges                        | Add rows to `BadgeRequirements` (id, badge, requirement, text)                                                                                                 |
 | Change or hide the moose                    | `hero_image_url`: blank = built-in animation, an https image URL = your image, `none` = hide it                                                                |
 | Bring back last season's roster             | Paste the old enrollment responses into a tab named `Import`, then StrenGames → Import roster from the "Import" tab…                                           |
 
@@ -132,4 +131,4 @@ npm run demo -- "2025-11-10 19:30:00"   # writes test/preview.html with made-up 
 
 All of these run in the **Deploy Apps Script** workflow, and nothing deploys unless they pass.
 
-`tools/parse_handbook.py` regenerates the badge list from `pdftotext -layout` output of the Handbook. `tools/cut_moose.py` re-cuts the animation from the original banner GIF.
+`tools/cut_moose.py` re-cuts the animation from the original banner GIF.

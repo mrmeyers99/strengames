@@ -872,7 +872,7 @@
       var d = S.draft,
         btn = $('#submitBtn');
       if (d.badge_done && !String(d.badge_requirement).trim()) {
-        toast('Pick or type the badge requirement you completed.', true);
+        toast('Tell us which badge requirement you completed.', true);
         var i = $('#badgeInput');
         if (i) i.focus();
         return;
@@ -894,213 +894,57 @@
         });
     }
 
-    // ------------------------------------------------------------ badge requirement typeahead
+    // ------------------------------------------------------------ badge requirement (free text)
+    // Participants describe the requirement in their own words; the Handbook text is never shown on this public page.
     function mountBadgePicker(box, editable, r, wk) {
       box.dataset.mounted = '1';
-      var reqs = S.boot.badgeRequirements || [];
-      var byId = {};
-      reqs.forEach(function (q) {
-        byId[q.id] = q;
-      });
       var past = (r.pastBadgeRequirements || []).filter(function (p) {
         return p.week !== wk;
       });
-      var pastIds = {};
-      past.forEach(function (p) {
-        if (p.id) pastIds[p.id] = p.week;
-      });
+      var norm = function (t) {
+        return String(t || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      };
       box.innerHTML =
-        '<div class="ta"><input type="text" id="badgeInput" role="combobox" aria-expanded="false" aria-controls="badgeList" aria-autocomplete="list" placeholder="Search badges or requirements — e.g. “knot”, “clove hitch”, “Barbell 2”"' +
+        '<label class="small" for="badgeInput">Which badge and requirement did you complete? <span class="req-mark">(required)</span></label>' +
+        '<textarea id="badgeInput" rows="2" maxlength="300" aria-required="true" placeholder="Badge name and requirement number, e.g. “Knot Craft, Req 2”"' +
         (editable ? '' : ' disabled') +
         '>' +
-        '<ul class="ta-list" id="badgeList" role="listbox" hidden></ul></div><div id="badgePicked"></div>';
+        esc(S.draft.badge_requirement) +
+        '</textarea>' +
+        '<div id="badgeNote"></div>' +
+        (past.length
+          ? '<div class="small muted" style="margin-top:6px">Logged in earlier weeks: ' +
+            past
+              .map(function (p) {
+                return 'Week ' + p.week + ' — ' + esc(p.text);
+              })
+              .join('; ') +
+            '</div>'
+          : '');
       var input = $('#badgeInput', box),
-        list = $('#badgeList', box),
-        picked = $('#badgePicked', box);
-      var items = [],
-        active = -1;
-
-      function showPicked() {
-        var d = S.draft;
-        if (!d.badge_requirement) {
-          picked.innerHTML = '';
-          return;
-        }
-        var q = d.badge_requirement_id && byId[d.badge_requirement_id];
-        var dup = d.badge_requirement_id && pastIds[d.badge_requirement_id];
-        picked.innerHTML =
-          '<div class="picked">' +
-          (q
-            ? '<span class="b">' +
-              esc(q.badge) +
-              '</span> <span class="muted">— ' +
-              esc(q.requirement) +
-              '</span>' +
-              '<details><summary>Full requirement</summary><div class="small" style="margin-top:6px">' +
-              esc(q.text) +
-              '</div></details>' +
-              (/\([a-z]+\)|▪/.test(q.text)
-                ? '<div class="note-all">This requirement has several parts. Every part must be done to count it.</div>'
-                : '')
-            : '<span class="b">Your entry:</span> ' + esc(d.badge_requirement)) +
-          (dup
-            ? '<div class="note-all">You already logged this requirement in week ' +
-              dup +
-              '. Each week should be a new requirement.</div>'
-            : '') +
-          (editable
-            ? '<div style="margin-top:8px"><button type="button" class="btn ghost" id="badgeClear" style="padding:6px 12px">Change</button></div>'
-            : '') +
-          '</div>';
-        var c = $('#badgeClear', picked);
-        if (c)
-          c.addEventListener('click', function () {
-            d.badge_requirement = '';
-            d.badge_requirement_id = '';
-            input.value = '';
-            input.hidden = false;
-            showPicked();
-            input.focus();
-          });
-        input.hidden = !!d.badge_requirement && editable;
-        if (!editable) input.hidden = true;
+        note = $('#badgeNote', box);
+      function check() {
+        var v = norm(input.value),
+          dup =
+            v &&
+            past.filter(function (p) {
+              return norm(p.text) === v;
+            })[0];
+        note.innerHTML = dup
+          ? '<div class="note-all">You already logged this requirement in week ' +
+            dup.week +
+            '. Each week should be a new requirement.</div>'
+          : '';
       }
-      function search(q) {
-        var toks = q
-          .toLowerCase()
-          .replace(/[^\w\s]/g, ' ')
-          .split(/\s+/)
-          .filter(String);
-        if (!toks.length) return [];
-        var out = [];
-        reqs.forEach(function (r, i) {
-          var badge = r.badge.toLowerCase(),
-            label = r.requirement.toLowerCase(),
-            hay = badge + ' ' + label + ' ' + label.replace(/\D/g, '') + ' ' + r.text.toLowerCase();
-          var score = 0;
-          for (var t = 0; t < toks.length; t++) {
-            var k = toks[t];
-            if (hay.indexOf(k) === -1) return;
-            if (badge.indexOf(k) === 0) score += 4;
-            else if (badge.indexOf(k) > -1) score += 3;
-            else if (/^\d+$/.test(k) && label.replace(/\D/g, '') === k) score += 3;
-            else score += 1;
-            if (new RegExp('\\b' + k + '\\b').test(hay)) score += 1; // whole-word beats substring (clove hitch vs cloves)
-          }
-          if (toks.length > 1 && hay.indexOf(toks.join(' ')) > -1) score += 2; // exact phrase
-          out.push({ r: r, s: score, i: i });
-        });
-        out.sort(function (a, b) {
-          return b.s - a.s || a.i - b.i;
-        });
-        return out.slice(0, 12).map(function (x) {
-          return x.r;
-        });
-      }
-      function render() {
-        var q = input.value.trim();
-        var html = '';
-        items = [];
-        if (!q && past.length) {
-          html += '<li class="grp" aria-disabled="true">Logged in earlier weeks</li>';
-          past.forEach(function (p) {
-            items.push({ id: p.id || '', text: p.text });
-            html += opt(items.length - 1, p.id && byId[p.id], p.text, 'Week ' + p.week);
-          });
-        }
-        search(q).forEach(function (r) {
-          items.push({ id: r.id, text: r.badge + ' — ' + r.requirement + ': ' + r.text });
-          html += opt(items.length - 1, r, null, pastIds[r.id] ? 'logged wk ' + pastIds[r.id] : '');
-        });
-        if (q) {
-          items.push({ id: '', text: q });
-          html +=
-            '<li class="free" role="option" data-i="' +
-            (items.length - 1) +
-            '">Use “<b>' +
-            esc(q) +
-            '</b>” as typed</li>';
-        }
-        if (!html) html = '<li class="grp">Start typing a badge name or a word from the requirement…</li>';
-        list.innerHTML = html;
-        list.hidden = false;
-        input.setAttribute('aria-expanded', 'true');
-        active = items.length && q ? 0 : -1;
-        highlight();
-        $all('li[data-i]', list).forEach(function (li) {
-          li.addEventListener('mousedown', function (e) {
-            e.preventDefault();
-            choose(Number(li.dataset.i));
-          });
-        });
-      }
-      function opt(i, r, rawText, tag) {
-        if (r)
-          return (
-            '<li role="option" data-i="' +
-            i +
-            '"><span class="b">' +
-            esc(r.badge) +
-            '</span><span class="r">' +
-            esc(r.requirement) +
-            '</span>' +
-            (tag ? ' <span class="muted small">· ' + esc(tag) + '</span>' : '') +
-            '<span class="t">' +
-            esc(r.text) +
-            '</span></li>'
-          );
-        return (
-          '<li role="option" data-i="' +
-          i +
-          '"><span class="b">' +
-          esc(rawText) +
-          '</span>' +
-          (tag ? ' <span class="muted small">· ' + esc(tag) + '</span>' : '') +
-          '</li>'
-        );
-      }
-      function highlight() {
-        $all('li[data-i]', list).forEach(function (li) {
-          li.classList.toggle('active', Number(li.dataset.i) === active);
-          if (Number(li.dataset.i) === active) li.scrollIntoView({ block: 'nearest' });
-        });
-      }
-      function choose(i) {
-        var it = items[i];
-        if (!it) return;
-        S.draft.badge_requirement = it.text;
-        S.draft.badge_requirement_id = it.id;
-        trSays();
-        list.hidden = true;
-        input.setAttribute('aria-expanded', 'false');
-        showPicked();
-      }
-      input.addEventListener('input', render);
-      input.addEventListener('focus', render);
-      input.addEventListener('blur', function () {
-        setTimeout(function () {
-          list.hidden = true;
-          input.setAttribute('aria-expanded', 'false');
-        }, 120);
+      input.addEventListener('input', function () {
+        S.draft.badge_requirement = input.value;
+        S.draft.badge_requirement_id = '';
+        check();
       });
-      input.addEventListener('keydown', function (e) {
-        if (list.hidden) return;
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          active = Math.min(items.length - 1, active + 1);
-          highlight();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          active = Math.max(0, active - 1);
-          highlight();
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          if (active > -1) choose(active);
-        } else if (e.key === 'Escape') {
-          list.hidden = true;
-        }
-      });
-      showPicked();
+      check();
     }
 
     // ------------------------------------------------------------ standings

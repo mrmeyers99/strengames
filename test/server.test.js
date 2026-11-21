@@ -11,7 +11,7 @@ function boot() {
   vm.runInContext(
     read('src/Logic.gs') +
       '\n' +
-      (fs.existsSync(path.join(__dirname, '..', 'src', 'BadgeData.gs')) ? read('src/BadgeData.gs') : '') +
+      '' +
       '\n' +
       read('src/Code.gs') +
       '\n' +
@@ -45,8 +45,8 @@ test('full season flow', () => {
   assert.strictEqual(b.season.weeks.length, 6);
   assert.strictEqual(b.season.weeks[0].deadlineLabel, 'Thu 30 Oct, 11:59 PM EDT');
   assert.strictEqual(b.registration.state, 'open');
-  // BadgeData.gs (Handbook text) is kept out of the public repo, so the seed may be absent
-  assert.ok(b.badgeRequirements.length === 424 || b.badgeRequirements.length === 0);
+  // Handbook requirement text is never sent to the public page
+  assert.strictEqual(b.badgeRequirements, undefined);
   assert.strictEqual(b.season.bonus.revealed, false);
   assert.strictEqual(b.season.bonus.name, 'Bonus Challenge', 'real name hidden before reveal');
 
@@ -112,7 +112,7 @@ test('full season flow', () => {
   assert.strictEqual(env.ss.getSheetByName('Checkins').getLastRow(), 2);
   assert.strictEqual(res.record.score.total, 60 + 70 + 80 + 80 + 393 + 200);
   assert.strictEqual(res.record.weeks[0].submitted, true);
-  assert.strictEqual(res.record.pastBadgeRequirements[0].id, 'knotsmanship-1');
+  assert.strictEqual(res.record.pastBadgeRequirements[0].text, 'Knotsmanship — Req 1');
   ctx.submitCheckin({ participantId: sam, week: 1, pa_days: 2, deed_days: 4 });
 
   // deadline passes; late rejected, override accepted
