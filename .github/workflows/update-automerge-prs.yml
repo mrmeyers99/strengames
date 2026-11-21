@@ -1,0 +1,61 @@
+# When main moves, merges main into every open PR that has auto-merge enabled, so it
+# can merge once its checks pass on the updated branch.
+#
+# Branches updated with the default GITHUB_TOKEN don't trigger other workflows, so
+# Tests/Lint wouldn't re-run and auto-merge would wait forever on required checks.
+# Add a fine-grained token with Contents + Pull requests read/write on this repo as the
+# AUTOMERGE_TOKEN repository secret to fix that. Without it this still updates branches.
+name: Update auto-merge PRs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: update-automerge-prs
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge main into auto-merge PRs
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          HAS_PAT: ${{ secrets.AUTOMERGE_TOKEN != '' }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$HAS_PAT" != "true" ]; then
+            echo "::warning::AUTOMERGE_TOKEN is not set; updated PRs won't re-run their checks."
+          fi
+
+          # Renovate keeps its own branches up to date, and stops managing a branch
+          # once someone else commits to it, so its PRs are left alone.
+          prs=$(gh pr list --repo "$REPO" --base main --state open --limit 100 \
+            --json number,headRefOid,isDraft,autoMergeRequest,author \
+            --jq '.[] | select(.autoMergeRequest != null and (.isDraft | not)
+                  and .author.login != "app/renovate" and .author.login != "renovate[bot]")
+                  | "\(.number) \(.headRefOid)"')
+
+          if [ -z "$prs" ]; then
+            echo "No open PRs with auto-merge enabled."
+            exit 0
+          fi
+
+          while read -r number sha; do
+            behind=$(gh api "repos/$REPO/compare/main...$sha" --jq .behind_by)
+            if [ "$behind" = "0" ]; then
+              echo "#$number is already up to date."
+              continue
+            fi
+            echo "Updating #$number ($behind commits behind main)..."
+            if ! gh api -X PUT "repos/$REPO/pulls/$number/update-branch" \
+                 -f expected_head_sha="$sha" --silent; then
+              echo "::warning::Could not update #$number (merge conflict, or the branch changed or can't be pushed to)."
+            fi
+          done <<< "$prs"
