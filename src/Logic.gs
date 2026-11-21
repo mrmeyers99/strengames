@@ -9,13 +9,13 @@ var Logic = (function () {
   var DEFAULTS = {
     season_name: 'StrenGames',
     timezone: 'America/New_York',
-    season_start: '',            // yyyy-MM-dd (a Saturday)
+    season_start: '', // yyyy-MM-dd (a Saturday)
     week_count: 6,
-    registration_opens: '',      // yyyy-MM-dd HH:mm:ss, season timezone
+    registration_opens: '', // yyyy-MM-dd HH:mm:ss, season timezone
     registration_closes: '',
-    team_join_closes: '',        // blank = same as registration_closes
-    default_opens_offset_days: 0,      // check-in opens N days after week start
-    default_deadline_grace_days: 6,    // due N days after week end (Fri + 6 = Thu)
+    team_join_closes: '', // blank = same as registration_closes
+    default_opens_offset_days: 0, // check-in opens N days after week start
+    default_deadline_grace_days: 6, // due N days after week end (Fri + 6 = Thu)
     default_deadline_time: '23:59:59',
     allow_late_submissions: false,
     late_submissions_count: false,
@@ -54,10 +54,18 @@ var Logic = (function () {
     var n = Number(v);
     return isNaN(n) ? dflt : n;
   }
-  function str(v) { return v === null || v === undefined ? '' : String(v).trim(); }
-  function normName(s) { return str(s).replace(/\s+/g, ' '); }
-  function key(s) { return normName(s).toLowerCase(); }
-  function normUsername(s) { return str(s).replace(/^@+/, '').replace(/\s+/g, '').toLowerCase(); }
+  function str(v) {
+    return v === null || v === undefined ? '' : String(v).trim();
+  }
+  function normName(s) {
+    return str(s).replace(/\s+/g, ' ');
+  }
+  function key(s) {
+    return normName(s).toLowerCase();
+  }
+  function normUsername(s) {
+    return str(s).replace(/^@+/, '').replace(/\s+/g, '').toLowerCase();
+  }
 
   /** Add days to a yyyy-MM-dd string (calendar arithmetic, DST-proof). */
   function addDays(ymd, days) {
@@ -66,8 +74,12 @@ var Logic = (function () {
     var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + days));
     return d.toISOString().slice(0, 10);
   }
-  function ymdOf(localStr) { return str(localStr).slice(0, 10); }
-  function withTime(ymd, t) { return ymd + ' ' + (t || '00:00:00'); }
+  function ymdOf(localStr) {
+    return str(localStr).slice(0, 10);
+  }
+  function withTime(ymd, t) {
+    return ymd + ' ' + (t || '00:00:00');
+  }
   function normLocal(s) {
     s = str(s);
     if (!s) return '';
@@ -86,27 +98,38 @@ var Logic = (function () {
     var c = {};
     Object.keys(DEFAULTS).forEach(function (k) {
       var v = rawConfig && rawConfig[k];
-      c[k] = (v === undefined || v === null || v === '') ? DEFAULTS[k] : v;
+      c[k] = v === undefined || v === null || v === '' ? DEFAULTS[k] : v;
     });
     var tz = str(c.timezone) || DEFAULTS.timezone;
-    function at(local) { local = normLocal(local); return local ? parseLocal(local, tz) : null; }
+    function at(local) {
+      local = normLocal(local);
+      return local ? parseLocal(local, tz) : null;
+    }
 
     var weeks = [];
-    var rows = (rawWeeks || []).filter(function (w) { return str(w.start_date) || str(w.end_date); });
+    var rows = (rawWeeks || []).filter(function (w) {
+      return str(w.start_date) || str(w.end_date);
+    });
     if (!rows.length && str(c.season_start)) {
       for (var i = 0; i < num(c.week_count, 6); i++) {
-        rows.push({ week: i + 1, start_date: addDays(ymdOf(c.season_start), 7 * i), end_date: addDays(ymdOf(c.season_start), 7 * i + 6) });
+        rows.push({
+          week: i + 1,
+          start_date: addDays(ymdOf(c.season_start), 7 * i),
+          end_date: addDays(ymdOf(c.season_start), 7 * i + 6)
+        });
       }
     }
     rows.forEach(function (w, idx) {
       var start = ymdOf(w.start_date);
       var end = ymdOf(w.end_date) || addDays(start, 6);
-      var opensLocal = normLocal(w.checkin_opens) || withTime(addDays(start, num(c.default_opens_offset_days, 0)), '00:00:00');
-      var deadlineLocal = normLocal(w.checkin_deadline) ||
+      var opensLocal =
+        normLocal(w.checkin_opens) || withTime(addDays(start, num(c.default_opens_offset_days, 0)), '00:00:00');
+      var deadlineLocal =
+        normLocal(w.checkin_deadline) ||
         withTime(addDays(end, num(c.default_deadline_grace_days, 6)), str(c.default_deadline_time) || '23:59:59');
       weeks.push({
         week: num(w.week, idx + 1),
-        label: str(w.label) || ('Week ' + num(w.week, idx + 1)),
+        label: str(w.label) || 'Week ' + num(w.week, idx + 1),
         startDate: start,
         endDate: end,
         opensLocal: opensLocal,
@@ -162,7 +185,8 @@ var Logic = (function () {
   }
 
   function perfectScore(season) {
-    var p = season.points, n = season.weeks.length;
+    var p = season.points,
+      n = season.weeks.length;
     return n * (7 * p.physical + 7 * p.deed + p.agon + p.badge) + season.agftMax + p.meetup + p.personalGoal + p.bonus;
   }
 
@@ -176,7 +200,11 @@ var Logic = (function () {
   /** override: epoch ms or null — a personal extension of the closing time. */
   function registrationStatus(season, now, override) {
     var closes = maxOf(season.registration.closes, override);
-    return { state: windowState(season.registration.opens, closes, now), opens: season.registration.opens, closes: closes };
+    return {
+      state: windowState(season.registration.opens, closes, now),
+      opens: season.registration.opens,
+      closes: closes
+    };
   }
   function teamJoinStatus(season, now, override) {
     var closes = maxOf(season.registration.teamJoinCloses, override);
@@ -240,7 +268,8 @@ var Logic = (function () {
     }
     if (str(input.agft) !== '') {
       var a = Number(input.agft);
-      if (isNaN(a) || a < 0 || a > season.agftMax) errs.push('AGFT score must be between 0 and ' + season.agftMax + '.');
+      if (isNaN(a) || a < 0 || a > season.agftMax)
+        errs.push('AGFT score must be between 0 and ' + season.agftMax + '.');
       else out.agft = a;
     }
     if (errs.length) throw new Error(errs.join(' '));
@@ -252,11 +281,26 @@ var Logic = (function () {
   function scoreParticipants(season, participants, checkins) {
     var p = season.points;
     var validWeeks = {};
-    season.weeks.forEach(function (w) { validWeeks[w.week] = true; });
+    season.weeks.forEach(function (w) {
+      validWeeks[w.week] = true;
+    });
     var byId = {};
     participants.forEach(function (pt) {
-      byId[pt.id] = { id: pt.id, name: pt.name, username: pt.username, physical: 0, deeds: 0, agons: 0, badges: 0,
-        agft: 0, meetup: 0, personalGoal: 0, bonus: 0, total: 0, weeksReported: 0 };
+      byId[pt.id] = {
+        id: pt.id,
+        name: pt.name,
+        username: pt.username,
+        physical: 0,
+        deeds: 0,
+        agons: 0,
+        badges: 0,
+        agft: 0,
+        meetup: 0,
+        personalGoal: 0,
+        bonus: 0,
+        total: 0,
+        weeksReported: 0
+      };
     });
     // one row per participant+week: keep the latest submitted_at (defensive; the app upserts)
     var latest = {};
@@ -265,7 +309,8 @@ var Logic = (function () {
       if (!latest[k] || num(c.submitted_at, 0) >= num(latest[k].submitted_at, 0)) latest[k] = c;
     });
     Object.keys(latest).forEach(function (k) {
-      var c = latest[k], s = byId[c.participant_id];
+      var c = latest[k],
+        s = byId[c.participant_id];
       if (!s || !validWeeks[Number(c.week)]) return;
       if (truthy(c.late) && !season.lateCounts) return;
       s.weeksReported++;
@@ -284,14 +329,20 @@ var Logic = (function () {
     });
     return byId;
   }
-  function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+  function clamp(n, lo, hi) {
+    return Math.max(lo, Math.min(hi, n));
+  }
 
   /** Standard competition ranking (1,2,2,4) on a pre-sorted array. */
   function rank(sorted, valueFn) {
-    var prev = null, r = 0;
+    var prev = null,
+      r = 0;
     sorted.forEach(function (row, i) {
       var v = valueFn(row);
-      if (v !== prev) { r = i + 1; prev = v; }
+      if (v !== prev) {
+        r = i + 1;
+        prev = v;
+      }
       row.rank = r;
     });
     return sorted;
@@ -299,7 +350,9 @@ var Logic = (function () {
 
   function teamStandings(season, teams, memberships, scores) {
     var byTeam = {};
-    teams.forEach(function (t) { byTeam[key(t.name)] = { name: t.name, leaderId: t.leader_id || '', members: [], total: 0 }; });
+    teams.forEach(function (t) {
+      byTeam[key(t.name)] = { name: t.name, leaderId: t.leader_id || '', members: [], total: 0 };
+    });
     var seen = {};
     memberships.forEach(function (m) {
       if (m.active === false || (m.active !== undefined && m.active !== '' && !truthy(m.active))) return;
@@ -312,32 +365,76 @@ var Logic = (function () {
       t.members.push({ id: s.id, name: s.name, total: s.total });
       t.total += s.total;
     });
-    var list = Object.keys(byTeam).map(function (k) {
-      var t = byTeam[k];
-      t.size = t.members.length;
-      t.score = t.size ? Math.round(t.total / t.size) : 0;
-      t.official = t.size >= season.minOfficialTeamSize;
-      t.members.sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name); });
-      return t;
-    }).filter(function (t) { return t.size > 0; });
-    list.sort(function (a, b) { return b.score - a.score || a.name.localeCompare(b.name); });
-    var official = rank(list.filter(function (t) { return t.official; }), function (t) { return t.score; });
-    var unofficial = list.filter(function (t) { return !t.official; }).map(function (t) { return Object.assign({}, t); });
-    rank(unofficial, function (t) { return t.score; });
+    var list = Object.keys(byTeam)
+      .map(function (k) {
+        var t = byTeam[k];
+        t.size = t.members.length;
+        t.score = t.size ? Math.round(t.total / t.size) : 0;
+        t.official = t.size >= season.minOfficialTeamSize;
+        t.members.sort(function (a, b) {
+          return b.total - a.total || a.name.localeCompare(b.name);
+        });
+        return t;
+      })
+      .filter(function (t) {
+        return t.size > 0;
+      });
+    list.sort(function (a, b) {
+      return b.score - a.score || a.name.localeCompare(b.name);
+    });
+    var official = rank(
+      list.filter(function (t) {
+        return t.official;
+      }),
+      function (t) {
+        return t.score;
+      }
+    );
+    var unofficial = list
+      .filter(function (t) {
+        return !t.official;
+      })
+      .map(function (t) {
+        return Object.assign({}, t);
+      });
+    rank(unofficial, function (t) {
+      return t.score;
+    });
     return { official: official, unofficial: unofficial };
   }
 
   function leaderboards(season, participants, teams, memberships, checkins) {
     var scores = scoreParticipants(season, participants, checkins);
-    var individuals = Object.keys(scores).map(function (id) { return scores[id]; });
-    individuals.sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name); });
-    rank(individuals, function (s) { return s.total; });
-    var agft = individuals.filter(function (s) { return s.agft > 0; })
-      .map(function (s) { return { id: s.id, name: s.name, agft: s.agft }; });
-    agft.sort(function (a, b) { return b.agft - a.agft || a.name.localeCompare(b.name); });
-    rank(agft, function (s) { return s.agft; });
+    var individuals = Object.keys(scores).map(function (id) {
+      return scores[id];
+    });
+    individuals.sort(function (a, b) {
+      return b.total - a.total || a.name.localeCompare(b.name);
+    });
+    rank(individuals, function (s) {
+      return s.total;
+    });
+    var agft = individuals
+      .filter(function (s) {
+        return s.agft > 0;
+      })
+      .map(function (s) {
+        return { id: s.id, name: s.name, agft: s.agft };
+      });
+    agft.sort(function (a, b) {
+      return b.agft - a.agft || a.name.localeCompare(b.name);
+    });
+    rank(agft, function (s) {
+      return s.agft;
+    });
     var t = teamStandings(season, teams, memberships, scores);
-    return { individuals: individuals, teamsOfficial: t.official, teamsUnofficial: t.unofficial, agft: agft, perfectScore: perfectScore(season) };
+    return {
+      individuals: individuals,
+      teamsOfficial: t.official,
+      teamsUnofficial: t.unofficial,
+      agft: agft,
+      perfectScore: perfectScore(season)
+    };
   }
 
   /**
@@ -353,23 +450,47 @@ var Logic = (function () {
     return asUTC - off2;
   }
   function tzOffset(epoch, tz) {
-    var f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit',
-      day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
     var parts = {};
-    f.formatToParts(new Date(epoch)).forEach(function (p) { parts[p.type] = p.value; });
+    f.formatToParts(new Date(epoch)).forEach(function (p) {
+      parts[p.type] = p.value;
+    });
     var wall = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour % 24, +parts.minute, +parts.second);
     return wall - Math.floor(epoch / 1000) * 1000;
   }
 
   return {
-    DEFAULTS: DEFAULTS, DAY_MS: DAY_MS,
-    truthy: truthy, num: num, str: str, normName: normName, key: key, normUsername: normUsername,
-    addDays: addDays, normLocal: normLocal,
-    buildSeason: buildSeason, perfectScore: perfectScore,
-    registrationStatus: registrationStatus, teamJoinStatus: teamJoinStatus, findWeek: findWeek,
-    weekStatus: weekStatus, canSubmit: canSubmit, bonusRevealed: bonusRevealed,
+    DEFAULTS: DEFAULTS,
+    DAY_MS: DAY_MS,
+    truthy: truthy,
+    num: num,
+    str: str,
+    normName: normName,
+    key: key,
+    normUsername: normUsername,
+    addDays: addDays,
+    normLocal: normLocal,
+    buildSeason: buildSeason,
+    perfectScore: perfectScore,
+    registrationStatus: registrationStatus,
+    teamJoinStatus: teamJoinStatus,
+    findWeek: findWeek,
+    weekStatus: weekStatus,
+    canSubmit: canSubmit,
+    bonusRevealed: bonusRevealed,
     validateCheckin: validateCheckin,
-    scoreParticipants: scoreParticipants, teamStandings: teamStandings, leaderboards: leaderboards,
+    scoreParticipants: scoreParticipants,
+    teamStandings: teamStandings,
+    leaderboards: leaderboards,
     zonedToEpoch: zonedToEpoch
   };
 })();
