@@ -28,7 +28,7 @@ after(async () => {
   if (browser) await browser.close();
 });
 
-/** Opens a preview; `asMe` remembers the demo's first participant (Arthur Hale) like a returning visitor. */
+/** Opens a preview; `asMe` is the demo's first participant (Arthur Hale) already logged in on this device. */
 async function open(file, { asMe = false, view, device } = {}) {
   const context = await browser.newContext(
     device ? { ...devices[device] } : { viewport: { width: 1100, height: 900 } }
@@ -41,7 +41,7 @@ async function open(file, { asMe = false, view, device } = {}) {
   await page.goto('file://' + file);
   await page.waitForSelector('#loading', { state: 'hidden' });
   if (asMe) {
-    await page.evaluate(() => localStorage.setItem('strengames.me', window.__demoMe));
+    await page.evaluate(() => localStorage.setItem('strengames.session', window.__demoToken));
     await page.reload();
     await page.waitForSelector('#loading', { state: 'hidden' });
   }
@@ -68,7 +68,14 @@ test('enlist: new person signs up and starts a team', async () => {
   await page.click('nav button[data-view=enlist]');
   await page.fill('input[name=name]', 'Percival Stout');
   await page.fill('input[name=username]', '@percy-stout');
+  await page.locator('#signupPin .pin-box').first().click();
+  await page.keyboard.type('2468');
+  await page.keyboard.type('2469'); // focus moved to the confirm boxes on its own
   await page.fill('.new-team[data-kind=signup]', 'Granite Grinders');
+  await page.click('#signupBtn');
+  assert.match(await toast(page), /PINs don.t match/);
+  await page.locator('#signupPin2 .pin-box').first().click();
+  await page.keyboard.type('2468');
   await page.click('#signupBtn');
   assert.match(await toast(page), /Welcome to .*Percival.*Joined: Granite Grinders/);
   assert.match(await page.textContent('#whoBtn'), /Percival Stout/);
@@ -81,6 +88,8 @@ test('enlist: duplicate TSL username is refused', async () => {
   const page = await open(REG_OPEN, { view: 'enlist' });
   await page.fill('input[name=name]', 'Someone Else');
   await page.fill('input[name=username]', 'arthurhale');
+  await page.locator('#signupPin .pin-box').first().click();
+  await page.keyboard.type('11111111');
   await page.click('#signupBtn');
   assert.match(await toast(page), /already enlisted/);
   await done(page);
@@ -195,5 +204,68 @@ test('phone: no sideways scrolling on any tab', async () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(overflow <= 0, `${view}: page is ${overflow}px too wide`);
   }
+  await done(page);
+});
+
+test('login: username, then four PIN boxes; wrong PIN warns; help link', async () => {
+  const page = await open(MID_SEASON, { view: 'report' });
+  assert.strictEqual(await page.textContent('#whoBtn'), 'Log in');
+  assert.strictEqual(await page.locator('#whoList, #whoSearch').count(), 0, 'no name picker');
+  await page.click('#view-report [data-who]');
+  await page.click('#loginHelpBtn');
+  assert.match(await page.textContent('#loginHelp'), /Strenuous Life forums/);
+  await page.fill('#loginUser', 'nobody-here');
+  await page.click('#loginNext');
+  await page.waitForSelector('#loginErr:has-text("No one is enlisted")');
+  await page.fill('#loginUser', '@ArthurHale');
+  await page.click('#loginNext');
+  await page.waitForSelector('#loginPin');
+  assert.strictEqual(await page.locator('#loginPin .pin-box').count(), 4);
+  assert.match(await page.textContent('#whoBody'), /not.*TSL forum password/);
+  await page.waitForFunction(() => document.activeElement.matches('#loginPin .pin-box'));
+  await page.keyboard.type('9999'); // the 4th digit submits on its own
+  await page.waitForSelector('#loginErr:has-text("4 more tries")');
+  assert.strictEqual(await page.inputValue('#loginPin .pin-box >> nth=0'), '', 'boxes cleared after a miss');
+  await page.keyboard.type('1234');
+  assert.match(await toast(page), /Welcome back, Arthur/);
+  assert.match(await page.textContent('#whoBtn'), /Arthur Hale/);
+  await page.waitForSelector('#reportForm');
+  // log out from the header
+  await page.click('#whoBtn');
+  await page.click('#logoutBtn');
+  assert.strictEqual(await page.textContent('#whoBtn'), 'Log in');
+  await page.waitForSelector('#view-report [data-who]');
+  await done(page);
+});
+
+test('login: pasting a PIN fills all four boxes', async () => {
+  const page = await open(MID_SEASON);
+  await page.click('#whoBtn');
+  await page.fill('#loginUser', 'silasbrandt');
+  await page.click('#loginNext');
+  await page.waitForSelector('#loginPin');
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text', '1 2 3 4');
+    document
+      .querySelector('#loginPin .pin-box')
+      .dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  assert.match(await toast(page), /Welcome back, Silas/);
+  await done(page);
+});
+
+test('a stale or forged session is logged out instead of acting as anyone', async () => {
+  const page = await open(MID_SEASON, { asMe: true, view: 'record' });
+  await page.waitForSelector('[data-edit-name]');
+  await page.evaluate(() => {
+    const t = localStorage.getItem('strengames.session').split('.');
+    localStorage.setItem('strengames.session', t[0] + '.' + t[1] + '.' + 'f'.repeat(64));
+  });
+  await page.reload();
+  await page.waitForSelector('#loading', { state: 'hidden' });
+  await page.click('nav button[data-view=record]');
+  await page.waitForSelector('#view-record [data-who]');
+  assert.strictEqual(await page.textContent('#whoBtn'), 'Log in');
   await done(page);
 });

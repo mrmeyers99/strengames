@@ -825,32 +825,87 @@
     display: flex;
     flex-direction: column;
   }
-  .people {
-    overflow-y: auto;
-    margin: 10px 0 0;
-    padding: 0;
-    list-style: none;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #fff;
+  /* login: four separate PIN boxes */
+  .pin-field {
+    margin-bottom: 18px;
   }
-  .people li button {
-    width: 100%;
-    text-align: left;
+  .pin-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .pin-note {
+    margin: 0 0 8px;
+  }
+  .pin-field .pin + .pin-note {
+    margin: 8px 0 0;
+  }
+  .pin {
+    display: flex;
+    gap: 10px;
+  }
+  input.pin-box {
+    width: 52px;
+    height: 60px;
+    padding: 0;
+    text-align: center;
+    font-family: var(--cond);
+    font-size: 28px;
+    font-weight: 700;
+    border: 2px solid #cfc4ad;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+    -webkit-text-security: disc;
+    caret-color: var(--gold);
+  }
+  input.pin-box:focus {
+    border-color: var(--gold);
+  }
+  .login-err {
+    color: var(--bad);
+    font-weight: 600;
+    font-size: 14px;
+    min-height: 1.2em;
+    margin: 0 0 10px;
+  }
+  .login-err:empty {
+    margin: 0;
+  }
+  .login-help {
+    margin-top: 14px;
+    font-size: 14px;
+  }
+  .help-link {
     background: none;
     border: 0;
-    border-bottom: 1px solid #f0e9da;
-    padding: 11px 12px;
+    padding: 4px 0;
+    color: var(--green-3);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
     cursor: pointer;
   }
-  .people li button:hover,
-  .people li button:focus-visible {
+  .help-box {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-left: 3px solid var(--gold);
     background: var(--gold-soft);
+    border-radius: 6px;
   }
-  .people .u {
-    color: var(--muted);
-    font-size: 13px;
-    margin-left: 6px;
+  .help-box p {
+    margin: 0 0 6px;
+  }
+  .help-box p:last-child {
+    margin: 0;
+  }
+  .demo-hint {
+    background: var(--gold-soft);
+    padding: 8px 10px;
+    border-radius: 6px;
+  }
+  #whoModal .modal {
+    overflow-y: auto;
   }
 
   /* toast */

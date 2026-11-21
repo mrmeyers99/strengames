@@ -33,7 +33,7 @@
           <div class="season-dates" id="seasonDates"></div>
         </div>
         <img class="mast-moose" id="mastMoose" alt="Theodore Roosevelt riding a moose" hidden />
-        <div class="whoami"><button id="whoBtn" type="button">Who are you?</button></div>
+        <div class="whoami"><button id="whoBtn" type="button">Log in</button></div>
       </div>
       <nav class="tabs" role="tablist" aria-label="Sections">
         <button role="tab" data-view="report" aria-selected="true">Weekly Report</button>
@@ -56,9 +56,13 @@
     <div class="modal-back" id="whoModal" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="whoTitle">
         <h2 id="whoTitle">Report for duty</h2>
-        <p class="lede small">Find your name. New to this season? <a href="#" id="whoEnlist">Enlist first</a>.</p>
-        <input type="search" id="whoSearch" placeholder="Search by name or TSL username" autocomplete="off" />
-        <ul class="people" id="whoList"></ul>
+        <div id="whoBody"></div>
+        <div class="login-help">
+          <button type="button" class="help-link" id="loginHelpBtn" aria-expanded="false" aria-controls="loginHelp">
+            Need help logging in?
+          </button>
+          <div id="loginHelp" class="help-box" hidden></div>
+        </div>
         <div class="row" style="margin-top: 12px">
           <button class="btn ghost" type="button" id="whoClose">Cancel</button>
         </div>

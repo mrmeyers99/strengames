@@ -9,7 +9,7 @@
 var SCHEMA = {
   Config: ['key', 'value', 'notes'],
   Weeks: ['week', 'label', 'start_date', 'end_date', 'checkin_opens', 'checkin_deadline'],
-  Participants: ['id', 'name', 'tsl_username', 'created_at'],
+  Participants: ['id', 'name', 'tsl_username', 'created_at', 'pin_hash', 'pin_failures', 'locked_until'],
   Teams: ['name', 'leader_id', 'leader_name', 'created_at'],
   Memberships: ['participant_id', 'name', 'team', 'joined_at', 'active'],
   Checkins: [
@@ -235,6 +235,7 @@ function signup(payload) {
     var username = Logic.normUsername(payload && payload.username);
     if (name.length < 2) throw new Error('Please enter your name.');
     if (!username) throw new Error('Please enter your TSL username.');
+    var pin = cleanPin_(payload && payload.pin);
     var ov = overridesFor_(username);
     var st = Logic.registrationStatus(season, now, ov.registration);
     if (st.state === 'upcoming') throw new Error('Registration opens ' + fmt_(season, st.opens) + '.');
@@ -244,7 +245,7 @@ function signup(payload) {
     people.forEach(function (p) {
       if (Logic.normUsername(p.tsl_username) === username) {
         throw new Error(
-          '@' + username + ' is already enlisted as ' + p.name + '. Pick your name under "Join more teams" instead.'
+          '@' + username + ' is already enlisted as ' + p.name + '. Log in with your TSL username and PIN instead.'
         );
       }
     });
@@ -252,10 +253,18 @@ function signup(payload) {
     if (!season.allowMultipleTeams && teamNames.length > 1) throw new Error('This season you can join only one team.');
 
     var id = Utilities.getUuid().replace(/-/g, '').slice(0, 10);
-    appendRow_('Participants', { id: id, name: name, tsl_username: username, created_at: new Date() });
+    var pinHash = hashPin_(pin);
+    appendRow_('Participants', {
+      id: id,
+      name: name,
+      tsl_username: username,
+      created_at: new Date(),
+      pin_hash: pinHash
+    });
     var joined = addMemberships_({ id: id, name: name }, teamNames, []);
     clearStandingsCache();
-    return { participant: { id: id, name: name, username: username }, joined: joined, bootstrap: getBootstrap() };
+    var session = session_({ id: id, name: name, tsl_username: username, pin_hash: pinHash });
+    return { participant: session.participant, token: session.token, joined: joined, bootstrap: getBootstrap() };
   });
 }
 
@@ -263,7 +272,7 @@ function joinTeams(payload) {
   return withLock_(function () {
     var season = getSeason_(),
       now = Date.now();
-    var p = participantById_(payload && payload.participantId);
+    var p = participantFromToken_(payload && payload.token);
     var ov = overridesFor_(p.tsl_username);
     var st = Logic.teamJoinStatus(season, now, ov.registration);
     if (st.state === 'upcoming') throw new Error('Team sign-up isn’t open yet.');
@@ -285,7 +294,7 @@ function joinTeams(payload) {
     }
     var joined = addMemberships_({ id: p.id, name: p.name }, teamNames, mine);
     clearStandingsCache();
-    return { joined: joined, record: getMyRecord(p.id), bootstrap: getBootstrap() };
+    return { joined: joined, record: recordFor_(p.id), bootstrap: getBootstrap() };
   });
 }
 
@@ -298,7 +307,7 @@ function leaveTeam(payload) {
   return withLock_(function () {
     var season = getSeason_(),
       now = Date.now();
-    var p = participantById_(payload && payload.participantId);
+    var p = participantFromToken_(payload && payload.token);
     var st = Logic.teamJoinStatus(season, now, overridesFor_(p.tsl_username).registration);
     if (st.state === 'closed')
       throw new Error('Team changes closed ' + fmt_(season, st.closes) + '. Contact the organizers.');
@@ -330,18 +339,18 @@ function leaveTeam(payload) {
       newLeader = next ? next.name : '';
     }
     clearStandingsCache();
-    return { left: row.team, newLeader: newLeader, record: getMyRecord(p.id), bootstrap: getBootstrap() };
+    return { left: row.team, newLeader: newLeader, record: recordFor_(p.id), bootstrap: getBootstrap() };
   });
 }
 
 /** Lets a participant fix the spelling of their display name. Usernames stay fixed (they are the identity). */
 function renameParticipant(payload) {
   return withLock_(function () {
-    var p = participantById_(payload && payload.participantId);
+    var p = participantFromToken_(payload && payload.token);
     var name = Logic.normName(payload && payload.name);
     if (name.length < 2) throw new Error('Please enter your name.');
     if (name.length > 80) throw new Error('That name is too long.');
-    if (name === p.name) return { record: getMyRecord(p.id), bootstrap: getBootstrap() };
+    if (name === p.name) return { record: recordFor_(p.id), bootstrap: getBootstrap() };
     var t = table_('Participants');
     writeRow_(t, p._row, { name: name });
     // keep the readable copies of the name in the other tabs in sync
@@ -360,11 +369,16 @@ function renameParticipant(payload) {
       });
     });
     clearStandingsCache();
-    return { record: getMyRecord(p.id), bootstrap: getBootstrap() };
+    return { record: recordFor_(p.id), bootstrap: getBootstrap() };
   });
 }
 
-function getMyRecord(participantId) {
+/** The logged-in person's own record. Takes the login token, never a participant id. */
+function getMyRecord(token) {
+  return recordFor_(participantFromToken_(token).id);
+}
+
+function recordFor_(participantId) {
   var season = getSeason_(),
     now = Date.now();
   var p = participantById_(participantId);
@@ -429,7 +443,7 @@ function submitCheckin(payload) {
   return withLock_(function () {
     var season = getSeason_(),
       now = Date.now();
-    var p = participantById_(payload && payload.participantId);
+    var p = participantFromToken_(payload && payload.token);
     var ov = overridesFor_(p.tsl_username);
     var week = Number(payload.week);
     var gate = Logic.canSubmit(season, week, now, ov[week]);
@@ -466,7 +480,7 @@ function submitCheckin(payload) {
     if (rowNum > 0) writeRow_(t, rowNum, obj);
     else appendRow_('Checkins', obj);
     clearStandingsCache();
-    return { late: gate.late, record: getMyRecord(p.id) };
+    return { late: gate.late, record: recordFor_(p.id) };
   });
 }
 
@@ -503,6 +517,177 @@ function getStandings() {
 
 function clearStandingsCache() {
   CacheService.getScriptCache().remove(CACHE_KEY);
+}
+
+// ---------------------------------------------------------------- login (TSL username + 4-digit PIN)
+//
+// The server never trusts a participant id sent by the page. After a correct PIN it hands out a signed
+// session token, and every per-person call takes that token and looks the person up from it.
+// To reset someone's PIN, an organizer clears their pin_hash cell in the Participants tab. The next time
+// they log in they choose a new one, and their old sessions stop working.
+
+var PIN_MAX_TRIES = 5; // wrong PINs in a row before the username is locked
+var LOCK_FIRST_MIN = 15; // first lock; each further wrong PIN doubles it
+var LOCK_MAX_MIN = 24 * 60;
+var SESSION_DAYS = 120;
+var PIN_ROUNDS = 100;
+
+/** Step 1 of logging in: does this username exist, and has it chosen a PIN yet? */
+function loginStatus(username) {
+  var p = participantByUsername_(readTable_('Participants'), username);
+  var wait = lockedUntil_(p) - Date.now();
+  return {
+    username: Logic.normUsername(p.tsl_username),
+    name: p.name,
+    hasPin: !!Logic.str(p.pin_hash),
+    locked: wait > 0 ? lockedMsg_(wait) : ''
+  };
+}
+
+/** Step 2: check the PIN. Wrong PINs count toward a lock on that username. */
+function login(payload) {
+  return withLock_(function () {
+    var t = table_('Participants');
+    var p = participantByUsername_(t.rows, payload && payload.username);
+    if (!Logic.str(p.pin_hash)) return { needsPin: true };
+    var now = Date.now();
+    var until = lockedUntil_(p);
+    if (until > now) throw new Error(lockedMsg_(until - now));
+    var pin = cleanPin_(payload && payload.pin);
+    if (!pinMatches_(pin, p.pin_hash)) {
+      var fails = Logic.num(p.pin_failures, 0) + 1;
+      var update = { pin_failures: fails };
+      var msg;
+      if (fails >= PIN_MAX_TRIES) {
+        var mins = Math.min(LOCK_MAX_MIN, LOCK_FIRST_MIN * Math.pow(2, fails - PIN_MAX_TRIES));
+        update.locked_until = new Date(now + mins * 60000);
+        msg = 'Wrong PIN. Too many tries: ' + lockedMsg_(mins * 60000);
+      } else {
+        var left = PIN_MAX_TRIES - fails;
+        msg =
+          'Wrong PIN. ' +
+          left +
+          (left === 1 ? ' more try' : ' more tries') +
+          ' before this username is locked for ' +
+          LOCK_FIRST_MIN +
+          ' minutes.';
+      }
+      writeRow_(t, p._row, update);
+      throw new Error(msg);
+    }
+    if (Logic.str(p.pin_failures) || Logic.str(p.locked_until))
+      writeRow_(t, p._row, { pin_failures: '', locked_until: '' });
+    return session_(p);
+  });
+}
+
+/** For someone without a PIN yet: enlisted before PINs existed, or an organizer cleared it. */
+function setPin(payload) {
+  return withLock_(function () {
+    var t = table_('Participants');
+    var p = participantByUsername_(t.rows, payload && payload.username);
+    if (Logic.str(p.pin_hash)) throw new Error('@' + p.tsl_username + ' already has a PIN. Log in with it instead.');
+    var pin = cleanPin_(payload && payload.pin);
+    p.pin_hash = hashPin_(pin);
+    writeRow_(t, p._row, { pin_hash: p.pin_hash, pin_failures: '', locked_until: '' });
+    return session_(p);
+  });
+}
+
+function participantByUsername_(rows, username) {
+  var u = Logic.normUsername(username);
+  if (!u) throw new Error('Please enter your TSL username.');
+  var p = rows.filter(function (r) {
+    return r.id && Logic.normUsername(r.tsl_username) === u;
+  })[0];
+  if (!p) throw new Error('No one is enlisted as @' + u + '. Check the spelling, or enlist first.');
+  return p;
+}
+
+function participantFromToken_(token) {
+  var again = 'Please log in again.';
+  var parts = String(token || '').split('.');
+  if (parts.length !== 3) throw new Error(again);
+  var exp = Number(parts[1]);
+  if (!(exp > Date.now())) throw new Error('Your login has expired. ' + again);
+  var p = readTable_('Participants').filter(function (r) {
+    return r.id && r.id === parts[0];
+  })[0];
+  if (!p || !Logic.str(p.pin_hash)) throw new Error(again);
+  if (!sameText_(sign_(p.id + '.' + exp + '.' + p.pin_hash), parts[2])) throw new Error(again);
+  return p;
+}
+
+function session_(p) {
+  var exp = Date.now() + SESSION_DAYS * 86400000;
+  return {
+    token: p.id + '.' + exp + '.' + sign_(p.id + '.' + exp + '.' + p.pin_hash),
+    participant: { id: p.id, name: p.name, username: Logic.normUsername(p.tsl_username) }
+  };
+}
+
+function cleanPin_(pin) {
+  var s = Logic.str(pin);
+  if (!/^\d{4}$/.test(s)) throw new Error('Your PIN must be exactly 4 digits.');
+  return s;
+}
+
+/** Stored as v1$salt$hash, so the PIN itself is never written to the sheet. */
+function hashPin_(pin, salt) {
+  salt = salt || Utilities.getUuid().replace(/-/g, '');
+  var b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + pin, Utilities.Charset.UTF_8);
+  for (var i = 1; i < PIN_ROUNDS; i++) b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, b);
+  return 'v1$' + salt + '$' + hex_(b);
+}
+
+function pinMatches_(pin, stored) {
+  var parts = String(stored).split('$');
+  return parts.length === 3 && sameText_(hashPin_(pin, parts[1]), String(stored));
+}
+
+function lockedUntil_(p) {
+  var v = Logic.str(p.locked_until);
+  if (!v) return 0;
+  try {
+    return Utilities.parseDate(v, SpreadsheetApp.getActive().getSpreadsheetTimeZone(), LOCAL_FMT).getTime();
+  } catch (e) {
+    return 0;
+  }
+}
+
+function lockedMsg_(ms) {
+  var m = Math.max(1, Math.ceil(ms / 60000));
+  var h = Math.ceil(m / 60);
+  var wait = m < 60 ? m + (m === 1 ? ' minute' : ' minutes') : h + (h === 1 ? ' hour' : ' hours');
+  return 'this username is locked. Try again in ' + wait + ', or ask for help on the forums.';
+}
+
+/** Signs session tokens with a random key kept in Script Properties (created on first use). */
+function sign_(text) {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty('session_key');
+  if (!key) {
+    key = Utilities.getUuid() + Utilities.getUuid();
+    props.setProperty('session_key', key);
+  }
+  return hex_(Utilities.computeHmacSha256Signature(text, key));
+}
+
+function hex_(bytes) {
+  return bytes
+    .map(function (b) {
+      return ('0' + ((b + 256) % 256).toString(16)).slice(-2);
+    })
+    .join('');
+}
+
+function sameText_(a, b) {
+  a = String(a);
+  b = String(b);
+  if (a.length !== b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 // ---------------------------------------------------------------- import (optional)
@@ -762,7 +947,7 @@ function participantById_(id) {
   var p = readTable_('Participants').filter(function (r) {
     return r.id && r.id === id;
   })[0];
-  if (!p) throw new Error('We couldn’t find that participant — pick your name again.');
+  if (!p) throw new Error('We couldn’t find that participant.');
   return p;
 }
 

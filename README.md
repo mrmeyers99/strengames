@@ -83,7 +83,9 @@ You can trigger either workflow by hand from the **Actions** tab ("Run workflow"
 | Allow only one team per person              | `allow_multiple_teams` = FALSE                                                                                                                                 |
 | Change points                               | `points_*` and `agft_max` in Config. Standings recalculate automatically                                                                                       |
 | Fix someone's report                        | Edit their row in `Checkins` directly                                                                                                                          |
-| Fix a name or merge duplicates              | Edit `Participants`. People pick their name from a list, so typos no longer split scores                                                                       |
+| Fix a name or merge duplicates              | Edit `Participants`. People log in by TSL username, so typos in names don't split scores                                                                       |
+| Reset someone's PIN                         | `Participants` tab: clear their `pin_hash` cell. Their old logins stop working, and the next time they log in they choose a new PIN                            |
+| Unlock someone early                        | `Participants` tab: clear their `pin_failures` and `locked_until` cells (or just reset their PIN)                                                              |
 | Change or hide the moose                    | `hero_image_url`: blank = built-in animation, an https image URL = your image, `none` = hide it                                                                |
 | Bring back last season's roster             | Paste the old enrollment responses into a tab named `Import`, then StrenGames → Import roster from the "Import" tab…                                           |
 
@@ -97,7 +99,10 @@ Re-scoring StrenGames VII's 791 responses with this code gives exactly the same 
 
 ## Notes
 
-- As with the Google Forms, there is no login: anyone with the link could file a report under any name. That matches TSL's honor system; the `Checkins` tab records every submission time.
+- **Logging in.** People log in with their TSL username and a 4-digit PIN they choose when they enlist. Anyone enlisted before PINs existed (or imported from last season) chooses one the first time they log in. Until they do, someone else who knows their username could claim it first, so tell everyone to log in and set a PIN early.
+- The server works out who is logged in from a signed session token (valid 120 days, kept in the browser). It never takes a participant id from the page, so nobody can file a report or change teams as someone else.
+- After 5 wrong PINs in a row the username is locked for 15 minutes. Each further miss doubles the lock, up to 24 hours. A correct PIN clears the count. The **Need help logging in?** link tells people to ask the organizers on the Strenuous Life forums.
+- PINs are stored salted and hashed in `pin_hash`, never as typed. With only 10,000 possible PINs, though, anyone with **edit** access to the spreadsheet could work one out (or just edit the data), so share the sheet only with organizers. The session signing key lives in Script Properties (`session_key`); deleting it logs everyone out.
 - The deadline rules are enforced on the server, so a stale browser tab can't sneak in a late report.
 
 ## Development

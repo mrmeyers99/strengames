@@ -35,11 +35,12 @@ const seed = `
   var last = ['Hale','Brandt','Crowley','Dunmore','Ellery','Finch','Garrow','Hatch','Ingram','Jessup','Keane','Lockhart','Mercer','Nash','Orwell','Pike','Quill','Rook','Stroud','Tolliver','Upton','Vance','Wilder','Yates','Ashby','Bristow','Carver','Drury','Eames','Fenwick'];
   var teams = ['Bull Moose Brigade', 'Rough Riders of the Rockies', 'Northwoods Lumberjacks', 'Gulf Coast Grit', 'The Arena Men', 'Solo Sentinels'];
   var rnd = (function (s) { return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; })(42);
-  var ids = [];
+  var ids = [], tokens = [];
   first.forEach(function (f, i) {
     var t = [teams[i % 5]]; if (i % 7 === 0) t.push(teams[(i + 2) % 5]); if (i === 29) t = [teams[5]];
-    var r = signup({ name: f + ' ' + last[i], username: (f + last[i]).toLowerCase(), teams: t });
+    var r = signup({ name: f + ' ' + last[i], username: (f + last[i]).toLowerCase(), pin: '1234', teams: t });
     ids.push(r.participant.id);
+    tokens.push(r.token);
   });
   var reqs = ${JSON.stringify(DEMO_BADGES)};
   [1, 2, 3, 4].forEach(function (w) {
@@ -48,21 +49,22 @@ const seed = `
       if (i === 0 && w === 4) return; // leave "me" a week to fill in
       if (rnd() < 0.15) return;
       var badge = rnd() < 0.6, q = reqs[Math.floor(rnd() * reqs.length)];
-      submitCheckin({ participantId: id, week: w, pa_days: Math.floor(rnd() * 8), deed_days: 3 + Math.floor(rnd() * 5), agon: rnd() < 0.75,
+      submitCheckin({ token: tokens[i], week: w, pa_days: Math.floor(rnd() * 8), deed_days: 3 + Math.floor(rnd() * 5), agon: rnd() < 0.75,
         badge_done: badge, badge_requirement: badge ? q : '',
         agft: rnd() < 0.15 ? Math.floor(150 + rnd() * 300) : '', meetup: rnd() < 0.12, personal_goal: w === 4 && rnd() < 0.3, bonus: w >= 3 && rnd() < 0.2 });
     });
   });
   env.clock.now = Logic.zonedToEpoch('${nowLocal}', 'America/New_York');
-  window.MockServer = { getBootstrap: getBootstrap, signup: signup, joinTeams: joinTeams, getMyRecord: getMyRecord, submitCheckin: submitCheckin, getStandings: getStandings, renameParticipant: renameParticipant, leaveTeam: leaveTeam };
-  window.__demoMe = ids[0];
+  window.MockServer = { getBootstrap: getBootstrap, signup: signup, joinTeams: joinTeams, getMyRecord: getMyRecord, submitCheckin: submitCheckin, getStandings: getStandings, renameParticipant: renameParticipant, leaveTeam: leaveTeam, loginStatus: loginStatus, login: login, setPin: setPin };
+  window.__demoToken = tokens[0];
+  window.DEMO_LOGIN_HINT = 'Demo: log in as arthurhale (or any username on the Standings tab) with PIN 1234.';
 })();
 </script>`;
+// Function replacements, so "$" in the inlined code is never read as a replace() pattern.
 let html = R('Index.html')
-  .replace("<?!= include('Styles'); ?>", R('Styles.html'))
-  .replace("<?!= include('Client'); ?>", seed + '\n' + R('Client.html'))
-  .replace(
-    '<?!= JSON.stringify(heroSrc_()) ?>',
+  .replace("<?!= include('Styles'); ?>", () => R('Styles.html'))
+  .replace("<?!= include('Client'); ?>", () => seed + '\n' + R('Client.html'))
+  .replace('<?!= JSON.stringify(heroSrc_()) ?>', () =>
     JSON.stringify(has('HeroImage.html') ? R('HeroImage.html').trim() : '')
   );
 fs.writeFileSync(outFile, html);
