@@ -53,6 +53,10 @@ test('registration window', () => {
 test('check-in windows, late handling, overrides', () => {
   const s = season();
   assert.strictEqual(L.canSubmit(s, 1, at('2025-10-17 23:00:00')).ok, false); // before week starts
+  assert.strictEqual(s.weeks[0].opensLocal, '2025-10-24 00:00:00'); // opens on the week's last day (Fri)
+  assert.strictEqual(L.canSubmit(s, 1, at('2025-10-23 23:59:59')).ok, false); // mid-week: not yet
+  assert.deepStrictEqual(L.canSubmit(s, 1, at('2025-10-24 00:00:00')), { ok: true, late: false });
+  assert.strictEqual(L.canSubmit(season({ default_opens_offset_days: 0 }), 1, at('2025-10-18 09:00:00')).ok, true);
   assert.deepStrictEqual(L.canSubmit(s, 1, at('2025-10-30 23:59:59')), { ok: true, late: false });
   assert.strictEqual(L.canSubmit(s, 1, at('2025-10-31 00:00:00')).ok, false);
   assert.deepStrictEqual(L.canSubmit(s, 1, at('2025-10-31 00:00:00'), at('2025-11-01 23:59:59')), {

@@ -3,7 +3,7 @@ const fs = require('fs'),
   path = require('path');
 const R = f => fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8');
 const has = f => fs.existsSync(path.join(__dirname, '..', 'src', f));
-const nowLocal = process.argv[2] || '2025-11-10 19:30:00';
+const nowLocal = process.argv[2] || '2025-11-14 19:30:00';
 const outFile = process.argv[3] || path.join(__dirname, 'preview.html');
 // Made-up badge entries for the demo's filed reports.
 const DEMO_BADGES = [

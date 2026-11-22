@@ -44,7 +44,8 @@ var CONFIG_NOTES = {
   registration_opens: 'yyyy-MM-dd HH:mm:ss — sign-up opens',
   registration_closes: 'yyyy-MM-dd HH:mm:ss — sign-up closes',
   team_join_closes: 'Last moment enlisted folks can join extra teams (blank = registration_closes)',
-  default_opens_offset_days: 'If a week has no checkin_opens: opens this many days after week start',
+  default_opens_offset_days:
+    'If a week has no checkin_opens: opens this many days after week start (6 = the week’s last day, Friday)',
   default_deadline_grace_days:
     'If a week has no checkin_deadline: due this many days after week end (6 = following Thursday)',
   default_deadline_time: 'HH:mm:ss for default deadlines',
