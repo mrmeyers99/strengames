@@ -302,3 +302,21 @@ test('organizer tools refuse to run from the web page', () => {
   for (const fn of ['setup', 'fillWeeks', 'clearStandingsCache', 'importRosterPrompt', 'importRoster'])
     assert.throws(() => ctx[fn](), /StrenGames menu in the spreadsheet/, fn);
 });
+
+test('PINs stick on a sheet set up before the PIN columns existed', () => {
+  const { ctx, env } = boot();
+  const people = env.ss.getSheetByName('Participants');
+  // an older sheet: only the original four columns
+  people.d = people.d.map(r => r.slice(0, 4));
+  people.appendRow(['abc123', 'Old Timer', 'oldtimer', '2025-09-01 10:00:00']);
+  assert.strictEqual(ctx.loginStatus('oldtimer').hasPin, false);
+  const s = ctx.setPin({ username: 'oldtimer', pin: '4321' });
+  assert.ok(people.d[0].includes('pin_hash'), 'missing columns added');
+  assert.strictEqual(ctx.getMyRecord(s.token).participant.name, 'Old Timer', 'session works on the next call');
+  assert.strictEqual(ctx.loginStatus('oldtimer').hasPin, true);
+  assert.ok(ctx.login({ username: 'oldtimer', pin: '4321' }).token);
+  // enlisting on an old sheet stores the PIN too
+  people.d = people.d.map(r => r.slice(0, 4));
+  const n = ctx.signup({ pin: '1111', name: 'New Comer', username: 'newcomer' });
+  assert.strictEqual(ctx.getMyRecord(n.token).participant.name, 'New Comer');
+});

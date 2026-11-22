@@ -290,6 +290,7 @@ function signup(payload) {
 
     var id = Utilities.getUuid().replace(/-/g, '').slice(0, 10);
     var pinHash = hashPin_(pin);
+    ensureColumns_('Participants');
     appendRow_('Participants', {
       id: id,
       name: name,
@@ -583,6 +584,7 @@ function loginStatus(username) {
 /** Step 2: check the PIN. Wrong PINs count toward a lock on that username. */
 function login(payload) {
   return withLock_(function () {
+    ensureColumns_('Participants');
     var t = table_('Participants');
     var p = participantByUsername_(t.rows, payload && payload.username);
     if (!Logic.str(p.pin_hash)) return { needsPin: true };
@@ -620,6 +622,7 @@ function login(payload) {
 /** For someone without a PIN yet: enlisted before PINs existed, or an organizer cleared it. */
 function setPin(payload) {
   return withLock_(function () {
+    ensureColumns_('Participants');
     var t = table_('Participants');
     var p = participantByUsername_(t.rows, payload && payload.username);
     if (Logic.str(p.pin_hash)) throw new Error('@' + p.tsl_username + ' already has a PIN. Log in with it instead.');
@@ -1025,6 +1028,28 @@ function table_(name) {
 
 function readTable_(name) {
   return table_(name).rows;
+}
+
+/**
+ * Adds any SCHEMA columns an older sheet is missing (e.g. the PIN columns), so writes to them are never
+ * silently dropped. appendRow_ and writeRow_ skip fields that have no column.
+ */
+function ensureColumns_(name) {
+  var sh = sheet_(name);
+  var existing = sh.getLastColumn()
+    ? sh
+        .getRange(1, 1, 1, sh.getLastColumn())
+        .getValues()[0]
+        .map(function (h) {
+          return String(h).trim();
+        })
+    : [];
+  SCHEMA[name].forEach(function (h) {
+    if (existing.indexOf(h) === -1) {
+      existing.push(h);
+      sh.getRange(1, existing.length).setValue(h);
+    }
+  });
 }
 
 function appendRow_(name, obj) {
