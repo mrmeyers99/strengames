@@ -1,7 +1,7 @@
 <script>
   (function () {
     'use strict';
-    var APP_VERSION = '2026-11-21.1';
+    var APP_VERSION = '2026-11-22.1';
 
     // ------------------------------------------------------------ quotes
     var QUOTES = [
@@ -146,6 +146,11 @@
             if (/log in again/i.test(errMsg(e))) forgetSession();
             reject(e);
           });
+          if (typeof r[fn] !== 'function') {
+            // The page and its list of server functions came from different versions (e.g. right after a deploy).
+            if (window.console) console.error('Server function "' + fn + '" not found. Available:', Object.keys(r));
+            return reject(new Error('This page is out of date. Please reload it.'));
+          }
           r[fn].apply(r, args);
         } else if (window.MockServer) {
           try {
