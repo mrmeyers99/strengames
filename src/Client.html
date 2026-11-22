@@ -1,7 +1,7 @@
 <script>
   (function () {
     'use strict';
-    var APP_VERSION = '2026-11-15.5';
+    var APP_VERSION = '2026-11-21.1';
 
     // ------------------------------------------------------------ quotes
     var QUOTES = [
@@ -143,6 +143,7 @@
       return new Promise(function (resolve, reject) {
         if (window.google && google.script && google.script.run) {
           var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (e) {
+            if (/log in again/i.test(errMsg(e))) forgetSession();
             reject(e);
           });
           r[fn].apply(r, args);
@@ -150,6 +151,7 @@
           try {
             resolve(JSON.parse(JSON.stringify(window.MockServer[fn].apply(null, args))));
           } catch (e) {
+            if (/log in again/i.test(errMsg(e))) forgetSession();
             reject(e);
           }
         } else reject(new Error('No server available'));
@@ -161,6 +163,8 @@
       boot: null,
       skew: 0,
       me: null,
+      token: null,
+      login: { step: 'user' },
       record: null,
       standings: null,
       view: 'report',
@@ -172,7 +176,8 @@
       joinTeams: [],
       expanded: {}
     };
-    var LS_KEY = 'strengames.me';
+    var LS_KEY = 'strengames.session';
+    var OLD_LS_KEY = 'strengames.me'; // the old name picker; no longer used
     function store(k, v) {
       try {
         if (v === null) localStorage.removeItem(k);
@@ -257,7 +262,7 @@
       foot.className = 'app-version';
       foot.textContent = 'StrenGames Hub v' + APP_VERSION;
       document.body.appendChild(foot);
-      var missing = ['#whoBtn', '#whoModal', '#whoSearch', '#whoList', '#toast', '#loading'].filter(function (id) {
+      var missing = ['#whoBtn', '#whoModal', '#whoBody', '#toast', '#loading'].filter(function (id) {
         return !$(id);
       });
       if (missing.length) {
@@ -278,16 +283,13 @@
       });
       $('#whoBtn').addEventListener('click', openWho);
       $('#whoClose').addEventListener('click', closeWho);
-      $('#whoEnlist').addEventListener('click', function (e) {
-        e.preventDefault();
-        closeWho();
-        S.me = null;
-        S.record = null;
-        store(LS_KEY, null);
-        renderWho();
-        go('enlist');
+      $('#loginHelpBtn').addEventListener('click', function () {
+        var box = $('#loginHelp'),
+          open = box.hidden;
+        box.innerHTML = loginHelpHtml();
+        box.hidden = !open;
+        $('#loginHelpBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
       });
-      $('#whoSearch').addEventListener('input', renderWhoList);
       $('#whoModal').addEventListener('click', function (e) {
         if (e.target.id === 'whoModal') closeWho();
       });
@@ -298,8 +300,13 @@
       call('getBootstrap')
         .then(function (b) {
           applyBoot(b);
+          store(OLD_LS_KEY, null);
           var saved = load(LS_KEY);
-          if (saved && participant(saved)) S.me = saved;
+          var id = saved ? saved.split('.')[0] : '';
+          if (id && participant(id)) {
+            S.token = saved;
+            S.me = id;
+          }
           renderWho();
           $('#loading').hidden = true;
           go(
@@ -361,78 +368,289 @@
       window.scrollTo(0, 0);
     }
 
-    // ------------------------------------------------------------ identity
+    // ------------------------------------------------------------ identity (TSL username + 4-digit PIN)
+    // The server works out who you are from the session token it issued at login; the page never sends a
+    // participant id, so nobody can file a report as someone else.
     function renderWho() {
       var p = S.me && participant(S.me);
-      $('#whoBtn').textContent = p ? p.name + ' ▾' : 'Who are you?';
+      $('#whoBtn').textContent = p ? p.name + ' ▾' : 'Log in';
     }
     function openWho() {
+      if (!S.me) S.login = { step: 'user' };
       $('#whoModal').hidden = false;
-      $('#whoSearch').value = '';
-      renderWhoList();
-      setTimeout(function () {
-        $('#whoSearch').focus();
-      }, 30);
+      $('#loginHelp').hidden = true;
+      $('#loginHelpBtn').setAttribute('aria-expanded', 'false');
+      renderLogin();
     }
     function closeWho() {
       $('#whoModal').hidden = true;
     }
-    function renderWhoList() {
-      var q = $('#whoSearch').value.trim().toLowerCase();
-      var list = S.boot.participants
-        .filter(function (p) {
-          return (
-            !q ||
-            p.name.toLowerCase().indexOf(q) > -1 ||
-            String(p.username).toLowerCase().indexOf(q.replace(/^@/, '')) > -1
-          );
-        })
-        .slice(0, 80);
-      $('#whoList').innerHTML = list.length
-        ? list
-            .map(function (p) {
-              return (
-                '<li><button type="button" data-id="' +
-                esc(p.id) +
-                '">' +
-                esc(p.name) +
-                '<span class="u">@' +
-                esc(p.username) +
-                '</span></button></li>'
-              );
-            })
-            .join('')
-        : '<li class="empty">No one by that name yet. <a href="#" data-enlist>Enlist?</a></li>';
-      $all('#whoList button').forEach(function (b) {
-        b.addEventListener('click', function () {
-          setMe(b.dataset.id);
-          closeWho();
-        });
-      });
-      var en = $('#whoList [data-enlist]');
-      if (en)
-        en.addEventListener('click', function (e) {
+    function loginHelpHtml() {
+      var L = (S.boot && S.boot.season.links) || {};
+      return (
+        '<p>Forgot your PIN, locked out, or stuck? Reach out to the organizers on the <b>Strenuous Life forums</b>' +
+        (L.group ? ' (<a href="' + esc(L.group) + '" target="_blank" rel="noopener">StrenGames group</a>)' : '') +
+        ' and they’ll help you get back in.</p>' +
+        '<p>If they reset your PIN, log in with your TSL username and you’ll be asked to choose a new one.</p>'
+      );
+    }
+
+    function renderLogin() {
+      var body = $('#whoBody'),
+        L = S.login,
+        me = S.me && participant(S.me);
+      $('#whoTitle').textContent = me ? 'Logged in' : L.step === 'set' ? 'Choose your PIN' : 'Report for duty';
+      var hint = window.DEMO_LOGIN_HINT ? '<p class="small demo-hint">' + esc(window.DEMO_LOGIN_HINT) + '</p>' : '';
+      if (me) {
+        body.innerHTML =
+          '<p class="lede">You’re logged in as <b>' +
+          esc(me.name) +
+          '</b> <span class="muted">@' +
+          esc(me.username) +
+          '</span>.</p><div class="row"><button class="btn" type="button" id="logoutBtn">Log out</button></div>';
+        $('#logoutBtn').addEventListener('click', logOut);
+        return;
+      }
+      if (L.step === 'user') {
+        body.innerHTML =
+          hint +
+          '<p class="lede small">Log in with your TSL username and StrenGames PIN. New this season? <a href="#" data-enlist>Enlist first</a>.</p>' +
+          '<form id="loginUserForm" autocomplete="off">' +
+          '<label class="field"><span>TSL username</span><input type="text" id="loginUser" maxlength="60" placeholder="@your-username" autocapitalize="none" autocorrect="off" spellcheck="false" value="' +
+          esc(L.username || '') +
+          '"></label>' +
+          '<div class="login-err" id="loginErr" role="alert"></div>' +
+          '<button class="btn block" type="submit" id="loginNext">Continue</button></form>';
+        $('[data-enlist]', body).addEventListener('click', function (e) {
           e.preventDefault();
           closeWho();
           go('enlist');
         });
+        $('#loginUserForm').addEventListener('submit', function (e) {
+          e.preventDefault();
+          doLoginUser();
+        });
+        focusSoon($('#loginUser'));
+        return;
+      }
+      var who =
+        '<p class="lede small">' +
+        (L.step === 'set' ? 'Welcome, ' : 'Welcome back, ') +
+        '<b>' +
+        esc(L.name) +
+        '</b> <span class="muted">@' +
+        esc(L.username) +
+        '</span>. <a href="#" data-switch>Not you?</a></p>';
+      if (L.step === 'pin') {
+        body.innerHTML =
+          hint +
+          who +
+          '<form id="loginPinForm" autocomplete="off"><div class="field pin-field">' +
+          '<span class="pin-label" id="loginPinLbl">Enter your 4-digit PIN</span>' +
+          pinBoxes('loginPin', 'loginPinLbl') +
+          '<p class="small muted pin-note">The 4 numbers you chose for StrenGames, <b>not</b> your TSL forum password.</p></div>' +
+          '<div class="login-err" id="loginErr" role="alert">' +
+          esc(L.locked ? cap(L.locked) : '') +
+          '</div>' +
+          '<button class="btn block" type="submit" id="loginBtn">Log in</button></form>';
+        bindPin($('#loginPin'), doLogin);
+        $('#loginPinForm').addEventListener('submit', function (e) {
+          e.preventDefault();
+          doLogin();
+        });
+        focusSoon($('#loginPin .pin-box'));
+      } else {
+        body.innerHTML =
+          who +
+          '<p class="small">You don’t have a StrenGames PIN yet (or the organizers reset it). Choose 4 numbers you’ll remember. Don’t use your TSL forum password.</p>' +
+          '<form id="setPinForm" autocomplete="off"><div class="field pin-field">' +
+          '<span class="pin-label" id="setPinLbl">New 4-digit PIN</span>' +
+          pinBoxes('setPin', 'setPinLbl') +
+          '<span class="pin-label" id="setPin2Lbl" style="margin-top:12px">Enter it again</span>' +
+          pinBoxes('setPin2', 'setPin2Lbl') +
+          '</div><div class="login-err" id="loginErr" role="alert"></div>' +
+          '<button class="btn block" type="submit" id="setPinBtn">Save PIN and log in</button></form>';
+        bindPin($('#setPin'), function () {
+          $('#setPin2 .pin-box').focus();
+        });
+        bindPin($('#setPin2'), doSetPin);
+        $('#setPinForm').addEventListener('submit', function (e) {
+          e.preventDefault();
+          doSetPin();
+        });
+        focusSoon($('#setPin .pin-box'));
+      }
+      $('[data-switch]', body).addEventListener('click', function (e) {
+        e.preventDefault();
+        S.login = { step: 'user' };
+        renderLogin();
+      });
     }
-    function setMe(id) {
-      S.me = id;
+    function cap(t) {
+      return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+    }
+    function focusSoon(el) {
+      setTimeout(function () {
+        if (el) el.focus();
+      }, 30);
+    }
+    function loginErr(msg) {
+      var e = $('#loginErr');
+      if (e) e.textContent = cap(msg || '');
+    }
+
+    // Four separate one-digit boxes, so nobody mistakes this for their forum password.
+    function pinBoxes(id, labelledBy) {
+      var h = '<div class="pin" id="' + id + '" role="group" aria-labelledby="' + labelledBy + '">';
+      for (var i = 0; i < 4; i++)
+        h +=
+          '<input class="pin-box" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="off" data-lpignore="true" data-1p-ignore aria-label="Digit ' +
+          (i + 1) +
+          ' of 4">';
+      return h + '</div>';
+    }
+    function bindPin(root, onComplete) {
+      var boxes = $all('.pin-box', root);
+      function spread(from, digits) {
+        for (var k = 0; k < digits.length && from + k < 4; k++) boxes[from + k].value = digits.charAt(k);
+        var next = Math.min(3, from + digits.length);
+        boxes[next].focus();
+        if (pinValue(root).length === 4 && onComplete) onComplete();
+      }
+      boxes.forEach(function (b, i) {
+        b.addEventListener('input', function () {
+          var digits = b.value.replace(/\D/g, '');
+          b.value = '';
+          if (digits) spread(i, digits);
+        });
+        b.addEventListener('paste', function (e) {
+          var t = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\D/g, '');
+          e.preventDefault();
+          if (t) spread(0, t.slice(0, 4));
+        });
+        b.addEventListener('keydown', function (e) {
+          if (e.key === 'Backspace' && !b.value && i > 0) {
+            e.preventDefault();
+            boxes[i - 1].value = '';
+            boxes[i - 1].focus();
+          } else if (e.key === 'ArrowLeft' && i > 0) boxes[i - 1].focus();
+          else if (e.key === 'ArrowRight' && i < 3) boxes[i + 1].focus();
+        });
+        b.addEventListener('focus', function () {
+          b.select();
+        });
+      });
+    }
+    function pinValue(root) {
+      return root
+        ? $all('.pin-box', root)
+            .map(function (b) {
+              return b.value;
+            })
+            .join('')
+        : '';
+    }
+    function clearPin(root) {
+      $all('.pin-box', root).forEach(function (b) {
+        b.value = '';
+      });
+      var first = $('.pin-box', root);
+      if (first) first.focus();
+    }
+
+    function doLoginUser() {
+      var u = $('#loginUser').value,
+        btn = $('#loginNext');
+      if (!u.trim()) return loginErr('Enter your TSL username.');
+      loginErr('');
+      busy(btn, true, 'Checking…');
+      call('loginStatus', u)
+        .then(function (st) {
+          S.login = { step: st.hasPin ? 'pin' : 'set', username: st.username, name: st.name, locked: st.locked };
+          renderLogin();
+        })
+        .catch(function (e) {
+          busy(btn, false);
+          loginErr(errMsg(e));
+        });
+    }
+    function doLogin() {
+      var root = $('#loginPin'),
+        btn = $('#loginBtn'),
+        pin = pinValue(root);
+      if (btn.disabled) return;
+      if (pin.length !== 4) return loginErr('Enter all 4 digits of your PIN.');
+      loginErr('');
+      busy(btn, true, 'Logging in…');
+      call('login', { username: S.login.username, pin: pin })
+        .then(function (res) {
+          if (res.needsPin) {
+            S.login.step = 'set';
+            return renderLogin();
+          }
+          setSession(res, 'Welcome back');
+        })
+        .catch(function (e) {
+          busy(btn, false);
+          loginErr(errMsg(e));
+          clearPin(root);
+        });
+    }
+    function doSetPin() {
+      var btn = $('#setPinBtn'),
+        pin = pinValue($('#setPin'));
+      if (btn.disabled) return;
+      if (pin.length !== 4) return loginErr('Enter all 4 digits.');
+      if (pin !== pinValue($('#setPin2'))) {
+        loginErr('The two PINs don’t match. Enter the same 4 digits twice.');
+        return clearPin($('#setPin2'));
+      }
+      loginErr('');
+      busy(btn, true, 'Saving…');
+      call('setPin', { username: S.login.username, pin: pin })
+        .then(function (res) {
+          setSession(res, 'PIN saved. Welcome');
+        })
+        .catch(function (e) {
+          busy(btn, false);
+          loginErr(errMsg(e));
+        });
+    }
+    function setSession(res, hello) {
+      S.token = res.token;
+      S.me = res.participant.id;
       S.record = null;
       S.week = null;
       S.draft = null;
-      store(LS_KEY, id);
+      S.login = { step: 'user' };
+      store(LS_KEY, S.token);
+      closeWho();
       renderWho();
-      go(S.view === 'record' ? 'record' : 'report');
+      toast(hello + ', ' + res.participant.name.split(' ')[0] + '!');
+      go(S.view === 'record' || S.view === 'enlist' ? S.view : 'report');
+    }
+    function forgetSession() {
+      S.token = null;
+      S.me = null;
+      S.record = null;
+      S.draft = null;
+      store(LS_KEY, null);
+      if (S.boot) renderWho();
+    }
+    function logOut() {
+      forgetSession();
+      S.login = { step: 'user' };
+      closeWho();
+      toast('Logged out.');
+      go(S.view);
     }
     function needMe(el, what) {
       el.innerHTML =
         quoteHtml() +
-        '<div class="card"><h2>Report for duty</h2><p class="lede">Pick your name to ' +
+        '<div class="card"><h2>Report for duty</h2><p class="lede">Log in with your TSL username and PIN to ' +
         what +
         '.</p>' +
-        '<div class="row"><button class="btn" type="button" data-who>Find my name</button>' +
+        '<div class="row"><button class="btn" type="button" data-who>Log in</button>' +
         (S.boot.registration.state === 'open'
           ? '<button class="btn ghost" type="button" data-go="enlist">Enlist for this season</button>'
           : '') +
@@ -446,19 +664,10 @@
     }
     function ensureRecord() {
       if (S.record && S.record.participant.id === S.me) return Promise.resolve(S.record);
-      return call('getMyRecord', S.me)
-        .then(function (r) {
-          S.record = r;
-          return r;
-        })
-        .catch(function (e) {
-          if (/couldn.t find/i.test(errMsg(e))) {
-            S.me = null;
-            store(LS_KEY, null);
-            renderWho();
-          }
-          throw e;
-        });
+      return call('getMyRecord', S.token).then(function (r) {
+        S.record = r;
+        return r;
+      });
     }
 
     // ------------------------------------------------------------ weekly report
@@ -471,6 +680,7 @@
           drawReport(el, r);
         })
         .catch(function (e) {
+          if (!S.me) return needMe(el, 'file your weekly report');
           el.innerHTML = '<div class="card">' + esc(errMsg(e)) + '</div>';
         });
     }
@@ -877,7 +1087,7 @@
         if (i) i.focus();
         return;
       }
-      var payload = Object.assign({ participantId: S.me }, d);
+      var payload = Object.assign({}, d, { token: S.token });
       busy(btn, true, 'Filing…');
       call('submitCheckin', payload)
         .then(function (res) {
@@ -1154,6 +1364,7 @@
           drawRecord(el, r);
         })
         .catch(function (e) {
+          if (!S.me) return needMe(el, 'see your record');
           el.innerHTML = '<div class="card">' + esc(errMsg(e)) + '</div>';
         });
     }
@@ -1292,7 +1503,7 @@
           e.preventDefault();
           var btn = $('button[type=submit]', f);
           busy(btn, true, 'Saving\u2026');
-          call('renameParticipant', { participantId: S.me, name: input.value })
+          call('renameParticipant', { token: S.token, name: input.value })
             .then(function (res) {
               applyBoot(res.bootstrap);
               S.record = res.record;
@@ -1358,7 +1569,13 @@
           '</h3>' +
           '<form id="signupForm" autocomplete="off">' +
           '<label class="field"><span>Your name</span><input type="text" name="name" maxlength="80" required placeholder="First and last name"></label>' +
-          '<label class="field"><span>Your TSL username</span><input type="text" name="username" maxlength="60" required placeholder="@your-username"></label>' +
+          '<label class="field"><span>Your TSL username</span><input type="text" name="username" maxlength="60" required placeholder="@your-username" autocapitalize="none" autocorrect="off" spellcheck="false"></label>' +
+          '<div class="field pin-field"><span class="pin-label" id="signupPinLbl">Choose a 4-digit PIN</span>' +
+          '<p class="small muted pin-note">You’ll log in here with your TSL username and this PIN. It’s just 4 numbers, <b>not</b> your TSL forum password.</p>' +
+          pinBoxes('signupPin', 'signupPinLbl') +
+          '<span class="pin-label" id="signupPin2Lbl" style="margin-top:12px">Enter the same PIN again</span>' +
+          pinBoxes('signupPin2', 'signupPin2Lbl') +
+          '</div>' +
           '<div class="field"><span style="font-weight:600;display:block;margin-bottom:6px">Team' +
           (season.allowMultipleTeams ? '(s)' : '') +
           ' <span class="muted small">(optional)</span></span>' +
@@ -1367,7 +1584,7 @@
           '<button class="btn block" type="submit" id="signupBtn">Enlist</button></form></div>';
       } else if (!me) {
         html +=
-          '<div class="card"><p style="margin:0">Already enlisted? <a href="#" data-who>Find your name</a> to report or join teams.</p></div>';
+          '<div class="card"><p style="margin:0">Already enlisted? <a href="#" data-who>Log in</a> to report or join teams.</p></div>';
       }
       el.innerHTML = html;
       var w = $('[data-who]', el);
@@ -1378,6 +1595,10 @@
         });
       if (reg.state === 'open' && !me) {
         bindTeamPicker(el, 'signup');
+        bindPin($('#signupPin', el), function () {
+          $('#signupPin2 .pin-box', el).focus();
+        });
+        bindPin($('#signupPin2', el));
         $('#signupForm', el).addEventListener('submit', doSignup);
       }
       if (me) {
@@ -1463,7 +1684,7 @@
         '\n\nYou can rejoin until team changes close.';
       if (!window.confirm(msg)) return;
       busy(btn, true, 'Leaving\u2026');
-      call('leaveTeam', { participantId: S.me, team: team })
+      call('leaveTeam', { token: S.token, team: team })
         .then(function (res) {
           applyBoot(res.bootstrap);
           S.record = res.record;
@@ -1574,9 +1795,20 @@
       var payload = {
         name: f.name.value,
         username: f.username.value,
+        pin: pinValue($('#signupPin')),
         teams: S.signupTeams.slice(),
         newTeam: $('.new-team[data-kind=signup]').value
       };
+      if (payload.pin.length !== 4) {
+        toast('Choose a 4-digit PIN.', true);
+        $('#signupPin .pin-box').focus();
+        return;
+      }
+      if (payload.pin !== pinValue($('#signupPin2'))) {
+        toast('The two PINs don’t match. Enter the same 4 digits twice.', true);
+        clearPin($('#signupPin2'));
+        return;
+      }
       if (!S.boot.season.allowMultipleTeams && payload.teams.length && payload.newTeam.trim()) {
         toast('Pick one team or start a new one, not both.', true);
         return;
@@ -1586,7 +1818,8 @@
         .then(function (res) {
           applyBoot(res.bootstrap);
           S.me = res.participant.id;
-          store(LS_KEY, S.me);
+          S.token = res.token;
+          store(LS_KEY, S.token);
           S.record = null;
           S.standings = null;
           renderWho();
@@ -1607,7 +1840,7 @@
     }
     function doJoin() {
       var btn = $('#joinBtn');
-      var payload = { participantId: S.me, teams: S.joinTeams.slice(), newTeam: $('.new-team[data-kind=join]').value };
+      var payload = { token: S.token, teams: S.joinTeams.slice(), newTeam: $('.new-team[data-kind=join]').value };
       if (!payload.teams.length && !payload.newTeam.trim()) {
         toast('Pick a team or enter a new team name.', true);
         return;
