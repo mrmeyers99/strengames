@@ -20,7 +20,7 @@ const QUIPS = (() => {
 
 let browser;
 before(async () => {
-  execFileSync('node', [path.join(__dirname, 'build-preview.js'), '2025-11-10 19:30:00', MID_SEASON]);
+  execFileSync('node', [path.join(__dirname, 'build-preview.js'), '2025-11-14 19:30:00', MID_SEASON]);
   execFileSync('node', [path.join(__dirname, 'build-preview.js'), '2025-10-10 12:00:00', REG_OPEN]);
   browser = await chromium.launch();
 });

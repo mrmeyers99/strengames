@@ -14,7 +14,7 @@ var Logic = (function () {
     registration_opens: '', // yyyy-MM-dd HH:mm:ss, season timezone
     registration_closes: '',
     team_join_closes: '', // blank = same as registration_closes
-    default_opens_offset_days: 0, // check-in opens N days after week start
+    default_opens_offset_days: 6, // check-in opens N days after week start (6 = last day of a Sat–Fri week)
     default_deadline_grace_days: 6, // due N days after week end (Fri + 6 = Thu)
     default_deadline_time: '23:59:59',
     allow_late_submissions: false,
@@ -123,7 +123,7 @@ var Logic = (function () {
       var start = ymdOf(w.start_date);
       var end = ymdOf(w.end_date) || addDays(start, 6);
       var opensLocal =
-        normLocal(w.checkin_opens) || withTime(addDays(start, num(c.default_opens_offset_days, 0)), '00:00:00');
+        normLocal(w.checkin_opens) || withTime(addDays(start, num(c.default_opens_offset_days, 6)), '00:00:00');
       var deadlineLocal =
         normLocal(w.checkin_deadline) ||
         withTime(addDays(end, num(c.default_deadline_grace_days, 6)), str(c.default_deadline_time) || '23:59:59');

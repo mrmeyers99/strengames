@@ -68,7 +68,7 @@ You can trigger either workflow by hand from the **Actions** tab ("Run workflow"
    - `registration_opens`, `registration_closes` (`yyyy-MM-dd HH:mm:ss`)
    - `bonus_challenge_name` / `bonus_challenge_description` / `bonus_reveal_at`
    - the `link_*` URLs and `organizer_contact`
-5. **StrenGames → Fill Weeks tab from season_start.** Leave `checkin_opens` / `checkin_deadline` blank to get the defaults: a week opens when it starts and is due the following Thursday at 11:59:59 PM. Or type exact times per week.
+5. **StrenGames → Fill Weeks tab from season_start.** Leave `checkin_opens` / `checkin_deadline` blank to get the defaults: a week’s report opens on its last day (Friday) and is due the following Thursday at 11:59:59 PM. Or type exact times per week.
 6. **Deploy → New deployment → Web app.** Set Execute as **Me** and Who has access **Anyone**. Share the URL.
    After later code edits: Deploy → Manage deployments → edit → **New version**, so the URL stays the same.
 
@@ -124,7 +124,7 @@ npm run test:e2e    # browser tests: drive the real page in headless Chromium
 ```
 
 ```bash
-npm run demo -- "2025-11-10 19:30:00"   # writes test/preview.html with made-up data at that moment
+npm run demo -- "2025-11-14 19:30:00"   # writes test/preview.html with made-up data at that moment
 ```
 
 | Test file                         | What it covers                                                                                                                                              |
